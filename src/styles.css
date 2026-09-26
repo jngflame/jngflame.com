@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "TASA Orbiter", Arial, sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+}
