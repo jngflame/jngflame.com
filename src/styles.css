@@ -33,5 +33,4 @@ html[data-theme="dark"] {
   --pullcord-top: 0px; /* anchor offset from the top */
   --pullcord-right: 7rem; /* distance from the right edge */
   --pullcord-z: 5; /* wrapper z-index */
-  --pullcord-ink: rgba(255, 255, 255, 0.24); /* rope colour */
 }
