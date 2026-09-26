@@ -1,14 +1,69 @@
+import { PullCord } from "pullcord";
+import { useEffect, useState } from "react";
+import "pullcord/pullcord.css";
+
 const externalLink =
-  "underline decoration-2 underline-offset-2 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "underline decoration-2 underline-offset-2 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current";
+
+type Theme = "light" | "dark";
+
+function getSavedTheme(): Theme | null {
+  try {
+    const saved = window.localStorage.getItem("theme");
+    return saved === "light" || saved === "dark" ? saved : null;
+  } catch {
+    return null;
+  }
+}
 
 function App() {
+  const [savedTheme, setSavedTheme] = useState<Theme | null>(getSavedTheme);
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  const isDark = savedTheme ? savedTheme === "dark" : systemDark;
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateSystemTheme = (event: MediaQueryListEvent) =>
+      setSystemDark(event.matches);
+
+    media.addEventListener("change", updateSystemTheme);
+    return () => media.removeEventListener("change", updateSystemTheme);
+  }, []);
+
+  useEffect(() => {
+    if (savedTheme) {
+      document.documentElement.dataset.theme = savedTheme;
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", isDark ? "#111111" : "#ffffff");
+  }, [savedTheme, isDark]);
+
+  function toggleTheme() {
+    const nextTheme = isDark ? "light" : "dark";
+    setSavedTheme(nextTheme);
+    try {
+      window.localStorage.setItem("theme", nextTheme);
+    } catch {
+      // The toggle still works when storage is unavailable.
+    }
+  }
+
   return (
-    <div className="min-h-dvh bg-white text-black">
+    <div className="min-h-dvh bg-(--page-bg) text-(--page-text) transition-colors duration-300 motion-reduce:transition-none">
+      <PullCord
+        onPull={toggleTheme}
+        pulled={isDark}
+        ariaLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      />
       <div className="mx-auto w-full max-w-140 px-8">
         <header className="py-5">
-          <h1 className="text-3xl font-bold">
-            Inhwa Jang
-          </h1>
+          <h1 className="text-3xl font-bold">Inhwa Jang</h1>
         </header>
 
         <main className="flex max-w-78.75 flex-col gap-8 pb-12 sm:max-w-135 sm:gap-10 lg:max-w-170 lg:gap-12">
@@ -17,10 +72,7 @@ function App() {
           </p>
 
           <section aria-labelledby="ex-heading">
-            <h2
-              id="ex-heading"
-              className="text-2xl font-bold"
-            >
+            <h2 id="ex-heading" className="text-2xl font-bold">
               Ex
             </h2>
             <p className="mt-2 text-xl">
@@ -37,10 +89,7 @@ function App() {
           </section>
 
           <section aria-labelledby="projects-heading">
-            <h2
-              id="projects-heading"
-              className="text-2xl font-bold"
-            >
+            <h2 id="projects-heading" className="text-2xl font-bold">
               Projects
             </h2>
             <p className="mt-2 text-xl">
@@ -57,10 +106,7 @@ function App() {
           </section>
 
           <section aria-labelledby="contact-heading">
-            <h2
-              id="contact-heading"
-              className="text-2xl font-bold"
-            >
+            <h2 id="contact-heading" className="text-2xl font-bold">
               Call Me If You Get Lost..
             </h2>
             <div className="mt-2 flex flex-col gap-2 text-xl">

@@ -10,6 +10,22 @@
       rel="stylesheet"
     />
     <meta name="theme-color" content="#ffffff" />
+    <script>
+      try {
+        const theme = localStorage.getItem("theme");
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+        if (
+          theme === "dark" ||
+          (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.querySelector('meta[name="theme-color"]').content = "#111111";
+        }
+      } catch {
+        // The CSS media query still follows the system theme.
+      }
+    </script>
     <meta name="description" content="Inhwa Jang — to inspire with extraordinary insight and a rich soul." />
     <title>Inhwa Jang</title>
   </head>

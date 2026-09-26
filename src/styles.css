@@ -6,4 +6,32 @@
 
 html {
   font-family: var(--font-sans);
+  color-scheme: light;
+  --page-bg: #ffffff;
+  --page-text: #111111;
+  --pullcord-ink: rgba(17, 17, 17, 0.6);
+  --pullcord-right: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --page-bg: #171716;
+    --page-text: #f5f5f5;
+    --pullcord-ink: rgba(245, 245, 245, 0.7);
+  }
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #171716;
+  --page-text: #f5f5f5;
+  --pullcord-ink: rgba(245, 245, 245, 0.7);
+}
+
+:root {
+  --pullcord-top: 0px; /* anchor offset from the top */
+  --pullcord-right: 7rem; /* distance from the right edge */
+  --pullcord-z: 5; /* wrapper z-index */
+  --pullcord-ink: rgba(255, 255, 255, 0.24); /* rope colour */
 }
