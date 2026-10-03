@@ -1,36 +1,57 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "TASA Orbiter", Arial, sans-serif;
+  --font-sans: "Urbanist", "Pretendard", Arial, sans-serif;
+  --font-orbiter: "TASA Orbiter", "Pretendard", sans-serif;
+  --font-reading: "Pretendard", sans-serif;
+  --radius-5: 1.25rem;
+  --text-profile: 2.5rem;
 }
 
 html {
-  font-family: var(--font-sans);
   color-scheme: light;
-  --page-bg: #ffffff;
-  --page-text: #111111;
-  --pullcord-ink: rgba(17, 17, 17, 0.6);
-  --pullcord-right: 1rem;
+  font-family: var(--font-sans);
+  background: white;
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme]) {
-    color-scheme: dark;
-    --page-bg: #171716;
-    --page-text: #f5f5f5;
-    --pullcord-ink: rgba(245, 245, 245, 0.7);
-  }
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
 }
-
-html[data-theme="dark"] {
-  color-scheme: dark;
-  --page-bg: #171716;
-  --page-text: #f5f5f5;
-  --pullcord-ink: rgba(245, 245, 245, 0.7);
+.hero {
+  --hero-height: max(37.5rem, calc(100svh - 2.75rem));
+  height: var(--hero-height);
 }
-
-:root {
-  --pullcord-top: 0px; /* anchor offset from the top */
-  --pullcord-right: 7rem; /* distance from the right edge */
-  --pullcord-z: 5; /* wrapper z-index */
+.hero-scene {
+  width: calc(var(--hero-height) * 402 / 830);
+  aspect-ratio: 402 / 830;
+}
+.hero-tool {
+  display: flex;
+  width: 2.625rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6.25rem;
+  background: rgb(255 255 255 / 0.5);
+  cursor: pointer;
+}
+.hero-tool:hover {
+  background: rgb(255 255 255 / 0.75);
+}
+.hero-tool:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+.hero-tool:focus-visible {
+  outline: 0.125rem solid currentColor;
+  outline-offset: 0.25rem;
+}
+.inventory-collage {
+  aspect-ratio: 402 / 1431;
+}
+.inventory-dialog::backdrop {
+  backdrop-filter: blur(0.25rem);
 }

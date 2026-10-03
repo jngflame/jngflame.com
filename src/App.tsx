@@ -1,130 +1,679 @@
-import { PullCord } from "pullcord";
-import { useEffect, useState } from "react";
-import "pullcord/pullcord.css";
+import {
+  type AnchorHTMLAttributes,
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useTranslation } from "react-i18next";
+import { CloudSky } from "./components/CloudSky";
+import { jordanArticle } from "./data/articles";
+import { inventory } from "./data/inventory";
+import { supportedLanguages } from "./i18n";
 
-const externalLink =
-  "underline decoration-2 underline-offset-2 hover:opacity-60 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current";
+const AvatarModel = lazy(() => import("./components/AvatarModel"));
 
-type Theme = "light" | "dark";
+type Page = "index" | "articles" | "inventory" | "detail" | "missing";
+const asset = (name: string) => `/${name}`;
+const articlePath = "/articles/egypt-to-jordan";
+const pagePaths = {
+  index: "/",
+  articles: "/articles",
+  inventory: "/inventory",
+};
+const linkStyle =
+  "transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4";
+let isLinkNavigation = false;
 
-function getSavedTheme(): Theme | null {
-  try {
-    const saved = window.localStorage.getItem("theme");
-    return saved === "light" || saved === "dark" ? saved : null;
-  } catch {
-    return null;
-  }
+function subscribe(callback: () => void) {
+  window.addEventListener("popstate", callback);
+  return () => window.removeEventListener("popstate", callback);
+}
+
+function getPage(path: string): Page {
+  if (path === "/" || path === "/index") return "index";
+  if (path === "/articles" || path === "/article") return "articles";
+  if (path === "/inventory") return "inventory";
+  if (path === articlePath) return "detail";
+  return "missing";
+}
+
+function Link({
+  href,
+  onClick,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & {
+  href: string;
+}) {
+  return (
+    <a
+      {...props}
+      href={href}
+      onClick={(event) => {
+        onClick?.(event);
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        const next = new URL(href, window.location.origin);
+        isLinkNavigation = true;
+        window.history.pushState(null, "", next.pathname + next.hash);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        requestAnimationFrame(() => {
+          isLinkNavigation = false;
+          const behavior = "smooth";
+          if (next.hash)
+            document
+              .getElementById(next.hash.slice(1))
+              ?.scrollIntoView({ behavior });
+          else window.scrollTo({ top: 0, behavior });
+        });
+      }}
+    />
+  );
+}
+
+function Divider({ compact = false }: { compact?: boolean; }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={compact ? "mx-1 overflow-hidden" : "overflow-hidden"}
+    >
+      <div className="flex w-max">
+        <img
+          src={asset(compact ? "a719a.svg" : "b22d1.svg")}
+          alt=""
+          width={compact ? 354 : 362}
+          height={4}
+          className="max-w-none"
+        />
+        <img
+          src={asset(compact ? "a719a.svg" : "b22d1.svg")}
+          alt=""
+          width={compact ? 354 : 362}
+          height={4}
+          className="max-w-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+function Footer({ compact = false }: { compact?: boolean; }) {
+  const { t } = useTranslation();
+  return (
+    <footer className="mx-auto w-full max-w-170 px-5 pb-18">
+      <Divider compact={compact} />
+      <div className="mt-9.5 flex items-center justify-between gap-4 font-orbiter text-black/40">
+        <div className="flex gap-7">
+          <a
+            href="https://github.com/jngflame"
+            target="_blank"
+            rel="noreferrer"
+            className={`underline underline-offset-2 ${linkStyle}`}
+          >
+            github
+          </a>
+          <a
+            href="mailto:jngflame@gmail.com"
+            className={`underline underline-offset-2 ${linkStyle}`}
+          >
+            {t("footer.email")}
+          </a>
+        </div>
+        <p className="text-sm">2026 © jngflame</p>
+      </div>
+    </footer>
+  );
+}
+
+function Navigation({ page }: { page: Page; }) {
+  const { t } = useTranslation();
+  return (
+    <nav
+      aria-label={t("navigation.label")}
+      className="sticky top-0 z-20 bg-white"
+    >
+      <div className="mx-auto flex max-w-170 items-center justify-between px-5 py-2.5 font-orbiter">
+        {(["index", "articles", "inventory"] as const).map((item) => (
+          <Link
+            key={item}
+            href={`${pagePaths[item]}#content`}
+            aria-current={page === item ? "page" : undefined}
+            className={`${linkStyle} ${page === item ? "text-black" : "text-black/30"}`}
+          >
+            {t(`navigation.${item}`)}
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function Hero({ page }: { page: Page; }) {
+  const { t, i18n } = useTranslation();
+  const [musicVisible, setMusicVisible] = useState(true);
+  const [animations, setAnimations] = useState<string[]>([]);
+  const [animation, setAnimation] = useState("idle");
+  const [playing, setPlaying] = useState(
+    () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const [motionRequested, setMotionRequested] = useState(false);
+  const [replayKey, setReplayKey] = useState(0);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [modelReady, setModelReady] = useState(false);
+  const controlsButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (controlsOpen) document.getElementById("animation")?.focus();
+  }, [controlsOpen]);
+  const hasTools = page !== "index";
+  const animationLabels: Record<string, string> = t("hero.animations", {
+    returnObjects: true,
+  });
+  const animationLabel = (name: string) => {
+    const variant = name.match(/^(.*)_(\d+)$/);
+    const base = variant?.[1] ?? name;
+    const label = animationLabels[base] ?? base.replaceAll("_", " ");
+    return variant
+      ? t("hero.animationVariant", { name: label, number: Number(variant[2]) })
+      : label;
+  };
+  return (
+    <section
+      aria-label={t("hero.label")}
+      className="hero relative isolate overflow-hidden bg-sky-800"
+    >
+      <CloudSky />
+      <div className="hero-scene pointer-events-none absolute top-1/2 left-1/2 max-w-full -translate-x-1/2 -translate-y-1/2 mix-blend-multiply" />
+      <div className="hero-scene pointer-events-none absolute top-1/2 left-1/2 max-w-full -translate-x-1/2 -translate-y-1/2">
+        <Suspense
+          fallback={
+            <p
+              role="status"
+              className="absolute inset-x-0 top-1/2 text-center text-sm text-white/80"
+            >
+              {t("hero.modelLoading")}
+            </p>
+          }
+        >
+          <AvatarModel
+            animation={animation}
+            playing={playing}
+            motionRequested={motionRequested}
+            replayKey={replayKey}
+            onAnimationsChange={setAnimations}
+            onReadyChange={setModelReady}
+          />
+        </Suspense>
+      </div>
+      <div className="absolute inset-x-0 top-6 mx-auto flex max-w-170 items-start justify-between px-5">
+        <div className="relative flex items-center rounded-full bg-white/30">
+          <label htmlFor="language" className="sr-only">
+            {t("hero.language")}
+          </label>
+          <select
+            id="language"
+            value={i18n.resolvedLanguage ?? "en"}
+            onChange={(event) => {
+              void i18n.changeLanguage(event.target.value);
+            }}
+            className="cursor-pointer appearance-none rounded-full py-2 pr-9 pl-3.5 leading-6 text-black/80 focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            {supportedLanguages.map((language) => (
+              <option key={language} value={language}>
+                {language}
+              </option>
+            ))}
+          </select>
+          <img
+            src={asset("bd72e.svg")}
+            alt=""
+            width={14}
+            height={14}
+            className="pointer-events-none absolute right-3.5"
+          />
+        </div>
+        <div className="relative flex flex-col gap-4">
+          <button
+            ref={controlsButtonRef}
+            type="button"
+            aria-label={t("hero.animationControls")}
+            aria-expanded={controlsOpen}
+            aria-controls="animation-controls"
+            disabled={!modelReady}
+            onClick={() => setControlsOpen(!controlsOpen)}
+            className="hero-tool"
+          >
+            <img src={asset("d1dae.svg")} alt="" width={24} height={24} />
+          </button>
+          {hasTools && !controlsOpen && (
+            <>
+              <Link
+                href="/inventory#content"
+                aria-label={t("hero.viewInventory")}
+                className="hero-tool"
+              >
+                <img src={asset("0c976.svg")} alt="" width={24} height={24} />
+              </Link>
+              <Link
+                href="/#profile-photo"
+                aria-label={t("hero.viewProfilePhoto")}
+                className="hero-tool"
+              >
+                <img src={asset("70920.svg")} alt="" width={24} height={24} />
+              </Link>
+            </>
+          )}
+          {controlsOpen && (
+            <fieldset
+              id="animation-controls"
+              aria-label={t("hero.animationControls")}
+              className="absolute top-14 right-0 z-10 w-64 min-w-0 rounded-3xl bg-white/90 p-4 font-orbiter shadow-lg backdrop-blur-sm"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setControlsOpen(false);
+                  controlsButtonRef.current?.focus();
+                }
+              }}
+            >
+              <label
+                htmlFor="animation"
+                className="mb-2 block text-sm text-black/60"
+              >
+                {t("hero.animationCount", { count: animations.length })}
+              </label>
+              <select
+                id="animation"
+                value={animation}
+                onChange={(event) => {
+                  setAnimation(event.target.value);
+                  setPlaying(true);
+                  setMotionRequested(true);
+                  setReplayKey((value) => value + 1);
+                }}
+                className="w-full cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-black focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {animations.map((name) => (
+                  <option key={name} value={name}>
+                    {animationLabel(name)}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  aria-pressed={!playing}
+                  onClick={() => {
+                    setPlaying(!playing);
+                    setMotionRequested(true);
+                  }}
+                  className={`flex-1 cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-sm ${linkStyle}`}
+                >
+                  {t(playing ? "hero.pauseAnimation" : "hero.playAnimation")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlaying(true);
+                    setMotionRequested(true);
+                    setReplayKey((value) => value + 1);
+                  }}
+                  className={`flex-1 cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-sm ${linkStyle}`}
+                >
+                  {t("hero.replayAnimation")}
+                </button>
+              </div>
+            </fieldset>
+          )}
+        </div>
+      </div>
+      {modelReady && (
+        <p className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/40 px-3 py-1.5 text-center text-xs whitespace-nowrap text-black/70 backdrop-blur-sm">
+          {t("hero.rotationHint")}
+        </p>
+      )}
+      {hasTools && musicVisible && (
+        <div className="absolute bottom-15 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-white/20 px-5 py-2 font-orbiter">
+          <a
+            href="https://open.spotify.com/search/Give%20It%20Up"
+            target="_blank"
+            rel="noreferrer"
+            className={`leading-tight ${linkStyle}`}
+          >
+            <span className="block text-sm text-black/80">Give It Up</span>
+            <span className="block text-xs text-black/40">
+              {t("hero.playOnSpotify")}
+            </span>
+          </a>
+          <button
+            type="button"
+            aria-label={t("hero.dismissMusic")}
+            onClick={() => setMusicVisible(false)}
+            className="cursor-pointer rounded-full focus-visible:outline-2 focus-visible:outline-offset-4"
+          >
+            <img src={asset("21823.svg")} alt="" width={16} height={16} />
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function IndexPage() {
+  const { t } = useTranslation();
+  return (
+    <main
+      id="content"
+      className="mx-auto w-full max-w-170 scroll-mt-11 px-5 pt-13.5 text-center"
+    >
+      <h1 className="text-profile leading-15 font-semibold sm:text-5xl">
+        {t("profile.name")}
+      </h1>
+      <p className="leading-6">A.K.A @jngflame</p>
+      <img
+        id="profile-photo"
+        src={asset("214e3.png")}
+        alt={t("profile.photoAlt")}
+        width={362}
+        height={235}
+        className="mt-10 aspect-362/235 w-full scroll-mt-16 rounded-5 object-cover"
+      />
+      <p className="mt-11.5 leading-6 uppercase">
+        {t("profile.tagline.first")}
+        <br />
+        {t("profile.tagline.second")}
+      </p>
+      <div className="mt-13">
+        <Divider />
+      </div>
+      <div className="mt-14.5 flex flex-col gap-13">
+        <section aria-labelledby="itinerary">
+          <h2 id="itinerary" className="text-xl leading-7.5 font-semibold">
+            {t("profile.itinerary")}
+          </h2>
+          <p className="mt-2 leading-6">KATUSA (2026-2027)</p>
+          <p className="mt-2 leading-6">
+            <a
+              href="https://horang.it/"
+              target="_blank"
+              rel="noreferrer"
+              className={linkStyle}
+            >
+              horang.it
+            </a>{" "}
+            (2024-2026)
+          </p>
+        </section>
+        <section aria-labelledby="contributes">
+          <h2 id="contributes" className="text-xl leading-7.5 font-semibold">
+            {t("profile.contributes")}
+          </h2>
+          <p className="mt-2 leading-6">
+            <a
+              href="https://apps.apple.com/us/app/%EB%94%EB%AF%B8%ED%8E%98%EC%9D%B4/id1642292289"
+              target="_blank"
+              rel="noreferrer"
+              className={linkStyle}
+            >
+              dimipay
+            </a>{" "}
+            (2022-2024)
+          </p>
+        </section>
+        <section aria-labelledby="education">
+          <h2 id="education" className="text-xl leading-7.5 font-semibold">
+            {t("profile.education")}
+          </h2>
+          <p className="mt-2 leading-6">{t("profile.university")} (2024-)</p>
+          <p className="mt-2 leading-6">
+            {t("profile.highSchool")} (2021-2024)
+          </p>
+        </section>
+      </div>
+      <div className="h-14.5" />
+    </main>
+  );
+}
+
+function ArticlePage() {
+  const { t } = useTranslation();
+  return (
+    <main
+      id="content"
+      aria-label={t("navigation.articles")}
+      className="mx-auto w-full max-w-170 scroll-mt-11 px-5 pt-11.5 pb-9.5 font-orbiter"
+    >
+      <ol lang="ko" className="flex flex-col gap-5">
+        <li>
+          <Link
+            href={articlePath}
+            className={`flex items-baseline gap-3 leading-6 ${linkStyle}`}
+          >
+            <span className="text-black/30">2026</span>
+            <span className="min-w-0 flex-1 font-reading text-black/80">
+              이집트에서 요르단으로
+            </span>
+            <time dateTime="2026-10-04" className="text-black/30">
+              10.04
+            </time>
+          </Link>
+        </li>
+        <li className="flex items-baseline gap-3 leading-6">
+          <span aria-hidden="true" className="invisible">
+            2026
+          </span>
+          <span className="min-w-0 flex-1 font-reading text-black/80">
+            보드 우승
+          </span>
+          <time dateTime="2026-10-04" className="text-black/30">
+            10.04
+          </time>
+        </li>
+        <li className="flex items-baseline gap-3 leading-6">
+          <span aria-hidden="true" className="invisible">
+            2026
+          </span>
+          <span className="min-w-0 flex-1 font-reading text-black/80">
+            이집트에서 요르단으로
+          </span>
+          <time dateTime="2026-02-28" className="text-black/30">
+            02.28
+          </time>
+        </li>
+      </ol>
+    </main>
+  );
+}
+
+function InventoryPage() {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<(typeof inventory)[number] | null>(
+    null,
+  );
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (selected) dialog.current?.showModal();
+  }, [selected]);
+  return (
+    <main
+      id="content"
+      aria-label={t("navigation.inventory")}
+      className="mx-auto w-full max-w-100.5 scroll-mt-11"
+    >
+      <div className="inventory-collage relative overflow-hidden">
+        {inventory.map((item) => (
+          <button
+            key={item.node}
+            type="button"
+            aria-label={t("inventory.enlarge", {
+              name: t(`inventory.items.${item.labelKey}`),
+            })}
+            data-node-id={item.node}
+            onClick={() => setSelected(item)}
+            className="inventory-item absolute flex cursor-zoom-in items-center justify-center focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-4"
+            style={{
+              left: `${(item.x / 402) * 100}%`,
+              top: `${(item.y / 1431) * 100}%`,
+              width: `${(item.width / 402) * 100}%`,
+              height: `${(item.height / 1431) * 100}%`,
+            }}
+          >
+            <img
+              src={asset(item.file)}
+              alt={t(`inventory.items.${item.labelKey}`)}
+              loading="lazy"
+              className="max-w-none object-cover"
+              style={{
+                width: `${((item.innerWidth ?? item.width) / item.width) * 100}%`,
+                height: `${((item.innerHeight ?? item.height) / item.height) * 100}%`,
+                transform: `rotate(${item.rotate ?? 0}deg)`,
+                boxShadow: item.shadow
+                  ? "-0.125rem 0.25rem 0.5rem rgb(0 0 0 / 0.5)"
+                  : undefined,
+              }}
+            />
+          </button>
+        ))}
+      </div>
+      <dialog
+        ref={dialog}
+        aria-label={
+          selected
+            ? t(`inventory.items.${selected.labelKey}`)
+            : t("inventory.image")
+        }
+        onClose={() => setSelected(null)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) dialog.current?.close();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") dialog.current?.close();
+        }}
+        className="inventory-dialog m-auto max-h-11/12 w-11/12 max-w-200 rounded-5 bg-white p-5 backdrop:bg-black/60"
+      >
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <p>{selected ? t(`inventory.items.${selected.labelKey}`) : null}</p>
+          <button
+            type="button"
+            onClick={() => dialog.current?.close()}
+            className={`cursor-pointer px-2 py-1 ${linkStyle}`}
+          >
+            {t("inventory.close")}
+          </button>
+        </div>
+        {selected && (
+          <img
+            src={asset(selected.file)}
+            alt={t(`inventory.items.${selected.labelKey}`)}
+            className="mx-auto max-h-160 max-w-full object-contain"
+          />
+        )}
+      </dialog>
+    </main>
+  );
+}
+
+function ArticleDetail() {
+  const { t, i18n } = useTranslation();
+  return (
+    <main id="content" className="mx-auto w-full max-w-170 px-6 pt-6 pb-13.5">
+      <Link
+        href="/articles#content"
+        className={`font-orbiter leading-6 text-black/30 underline underline-offset-2 ${linkStyle}`}
+      >
+        {t("navigation.back")}
+      </Link>
+      <article lang="ko" className="font-reading">
+        <h1 className="mt-6 text-2xl leading-9 font-semibold">
+          이집트에서 요르단으로
+        </h1>
+        <p
+          lang={i18n.resolvedLanguage}
+          className="mt-3 font-orbiter text-sm leading-5.25 text-black/30"
+        >
+          {t("article.metadata", { months: 3, minutes: 12 })}
+        </p>
+        <div className="mt-8 text-justify text-base leading-7.2 text-black/80">
+          {jordanArticle.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
+        </div>
+      </article>
+    </main>
+  );
 }
 
 function App() {
-  const [savedTheme, setSavedTheme] = useState<Theme | null>(getSavedTheme);
-  const [systemDark, setSystemDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? "en";
+  const path = useSyncExternalStore(
+    subscribe,
+    () => window.location.pathname.replace(/\/$/, "") || "/",
   );
-  const isDark = savedTheme ? savedTheme === "dark" : systemDark;
-
+  const page = getPage(path);
+  const previousPath = useRef(path);
+  const isDetail = page === "detail" || page === "missing";
   useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const updateSystemTheme = (event: MediaQueryListEvent) =>
-      setSystemDark(event.matches);
-
-    media.addEventListener("change", updateSystemTheme);
-    return () => media.removeEventListener("change", updateSystemTheme);
-  }, []);
-
-  useEffect(() => {
-    if (savedTheme) {
-      document.documentElement.dataset.theme = savedTheme;
-    } else {
-      delete document.documentElement.dataset.theme;
-    }
-
+    document.documentElement.lang = language;
+    const titles = {
+      index: t("profile.name"),
+      articles: t("navigation.articles"),
+      inventory: t("navigation.inventory"),
+      detail: "이집트에서 요르단으로",
+      missing: t("missing.title"),
+    };
+    document.title = `${titles[page]} — jngflame`;
     document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", isDark ? "#111111" : "#ffffff");
-  }, [savedTheme, isDark]);
-
-  function toggleTheme() {
-    const nextTheme = isDark ? "light" : "dark";
-    setSavedTheme(nextTheme);
-    try {
-      window.localStorage.setItem("theme", nextTheme);
-    } catch {
-      // The toggle still works when storage is unavailable.
+      .querySelector('meta[name="description"]')
+      ?.setAttribute(
+        "content",
+        `${t("profile.name")} — ${t("profile.tagline.first")} ${t("profile.tagline.second")}`,
+      );
+  }, [page, language, t]);
+  useLayoutEffect(() => {
+    if (isLinkNavigation) {
+      previousPath.current = path;
+      return;
     }
-  }
-
+    if (previousPath.current !== path) {
+      previousPath.current = path;
+      if (!window.location.hash) window.scrollTo(0, 0);
+    }
+    if (window.location.hash)
+      document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [path]);
   return (
-    <div className="min-h-dvh bg-(--page-bg) text-(--page-text) transition-colors duration-300 motion-reduce:transition-none">
-      <PullCord
-        onPull={toggleTheme}
-        pulled={isDark}
-        ariaLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      />
-      <div className="mx-auto w-full max-w-140 px-8">
-        <header className="py-5">
-          <h1 className="text-3xl font-bold">Inhwa Jang</h1>
-        </header>
-
-        <main className="flex max-w-78.75 flex-col gap-8 pb-12 sm:max-w-135 sm:gap-10 lg:max-w-170 lg:gap-12">
-          <p className="text-xl">
-            To inspire with extraordinary insight and a rich soul.
-          </p>
-
-          <section aria-labelledby="ex-heading">
-            <h2 id="ex-heading" className="text-2xl font-bold">
-              Ex
-            </h2>
-            <p className="mt-2 text-xl">
-              <a
-                className={externalLink}
-                href="https://horang.it/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                horang.it
-              </a>{" "}
-              (2024-2026)
-            </p>
-          </section>
-
-          <section aria-labelledby="projects-heading">
-            <h2 id="projects-heading" className="text-2xl font-bold">
-              Projects
-            </h2>
-            <p className="mt-2 text-xl">
-              <a
-                className={externalLink}
-                href="https://apps.apple.com/us/app/%EB%94%94%EB%AF%B8%ED%8E%98%EC%9D%B4/id1642292289"
-                target="_blank"
-                rel="noreferrer"
-              >
-                dimipay
-              </a>{" "}
-              (2022-2024)
-            </p>
-          </section>
-
-          <section aria-labelledby="contact-heading">
-            <h2 id="contact-heading" className="text-2xl font-bold">
-              Call Me If You Get Lost..
-            </h2>
-            <div className="mt-2 flex flex-col gap-2 text-xl">
-              <a className={externalLink} href="mailto:jngflame@gmail.com">
-                jngflame@gmail.com
-              </a>
-              <a
-                className={externalLink}
-                href="https://github.com/jngflame"
-                target="_blank"
-                rel="noreferrer"
-              >
-                github
-              </a>
-            </div>
-          </section>
+    <div className="min-h-dvh bg-white text-black">
+      <a
+        href="#content"
+        className="sr-only z-50 bg-white p-3 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        {t("navigation.skipToContent")}
+      </a>
+      {!isDetail && <Hero page={page} />}
+      {!isDetail && <Navigation page={page} />}
+      {page === "index" && <IndexPage />}
+      {page === "articles" && <ArticlePage />}
+      {page === "inventory" && <InventoryPage />}
+      {page === "detail" && <ArticleDetail />}
+      {page === "missing" && (
+        <main id="content" className="mx-auto max-w-170 px-6 py-20">
+          <h1 className="text-2xl">{t("missing.title")}</h1>
+          <Link href="/" className="mt-6 inline-block underline">
+            {t("missing.backToIndex")}
+          </Link>
         </main>
-      </div>
+      )}
+      <Footer compact={page === "articles" || page === "detail"} />
     </div>
   );
 }

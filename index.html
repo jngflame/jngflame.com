@@ -6,26 +6,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=TASA+Orbiter:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=TASA+Orbiter:wght@400;700&family=Urbanist:wght@400;600&display=swap"
       rel="stylesheet"
     />
     <meta name="theme-color" content="#ffffff" />
-    <script>
-      try {
-        const theme = localStorage.getItem("theme");
-        if (theme === "light" || theme === "dark") {
-          document.documentElement.dataset.theme = theme;
-        }
-        if (
-          theme === "dark" ||
-          (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)
-        ) {
-          document.querySelector('meta[name="theme-color"]').content = "#111111";
-        }
-      } catch {
-        // The CSS media query still follows the system theme.
-      }
-    </script>
+    <link rel="icon" href="data:," />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
+    />
     <meta name="description" content="Inhwa Jang — to inspire with extraordinary insight and a rich soul." />
     <title>Inhwa Jang</title>
   </head>

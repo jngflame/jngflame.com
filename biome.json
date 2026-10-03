@@ -18,6 +18,13 @@
     }
   },
   "files": {
-    "includes": ["**", "!dist", "!node_modules"]
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!src/lib/custom-effects",
+      "!public/figma",
+      "!public/*.svg"
+    ]
   }
 }
