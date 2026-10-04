@@ -141,19 +141,40 @@ function Navigation({ page }: { page: Page; }) {
   return (
     <nav
       aria-label={t("navigation.label")}
-      className="sticky top-0 z-20 bg-white"
+      className="top-0 z-20 bg-white"
     >
-      <div className="mx-auto flex max-w-170 items-center justify-between px-5 py-2.5 font-orbiter">
-        {(["index", "articles", "inventory"] as const).map((item) => (
+      <div className="mx-auto flex max-w-170 font-orbiter">
+        <div className="px-5 py-2.5 flex-1">
           <Link
-            key={item}
-            href={`${pagePaths[item]}#content`}
-            aria-current={page === item ? "page" : undefined}
-            className={`${linkStyle} ${page === item ? "text-black" : "text-black/30"}`}
+            key={"index"}
+            href={`${pagePaths.index}#content`}
+            aria-current={page === "index" ? "page" : undefined}
+            className={`${linkStyle} ${page === "index" ? "text-black" : "text-black/30"}`}
           >
-            {t(`navigation.${item}`)}
+            {t(`navigation.index`)}
           </Link>
-        ))}
+        </div>
+
+        <div className="px-5 py-2.5 flex-1 text-center">
+          <Link
+            key={"articles"}
+            href={`${pagePaths.articles}#content`}
+            aria-current={page === "articles" ? "page" : undefined}
+            className={`${linkStyle} ${page === "articles" ? "text-black" : "text-black/30"}`}
+          >
+            {t(`navigation.articles`)}
+          </Link>
+        </div>
+        <div className="px-5 py-2.5 flex-1 text-right">
+          <Link
+            key={"inventory"}
+            href={`${pagePaths.inventory}#content`}
+            aria-current={page === "inventory" ? "page" : undefined}
+            className={`${linkStyle} ${page === "inventory" ? "text-black" : "text-black/30"}`}
+          >
+            {t(`navigation.inventory`)}
+          </Link>
+        </div>
       </div>
     </nav>
   );
@@ -336,11 +357,6 @@ function Hero({ page }: { page: Page; }) {
           )}
         </div>
       </div>
-      {modelReady && (
-        <p className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-white/40 px-3 py-1.5 text-center text-xs whitespace-nowrap text-black/70 backdrop-blur-sm">
-          {t("hero.rotationHint")}
-        </p>
-      )}
       {hasTools && musicVisible && (
         <div className="absolute bottom-15 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-white/20 px-5 py-2 font-orbiter">
           <a

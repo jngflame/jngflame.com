@@ -28,9 +28,8 @@ export const ko = {
     modelLoading: "3D 캐릭터 불러오는 중…",
     modelError: "3D 캐릭터를 표시할 수 없습니다.",
     rotateModel: "3D 캐릭터 회전",
-    rotationHint: "좌우로 드래그하여 회전",
     rotationInstructions:
-      "좌우로 드래그하여 회전합니다. 키보드 초점이 있을 때 좌우 방향키로도 회전할 수 있습니다. 두 번 클릭하거나 Home 또는 Enter 키를 누르면 정면으로 돌아옵니다.",
+      "좌우로 드래그하여 회전합니다. 모바일에서는 두 손가락을 벌려 최대 3배까지 확대하고 오므려 원래 크기로 축소할 수 있습니다. 키보드 초점이 있을 때 좌우 방향키로도 회전할 수 있습니다. 두 번 클릭하거나 Home 또는 Enter 키를 누르면 정면으로 돌아옵니다.",
     language: "언어",
     dance: "춤추기",
     stopDancing: "춤 멈추기",

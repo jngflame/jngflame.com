@@ -59,6 +59,7 @@ export default function AvatarModel({
   const hostRef = useRef<HTMLDivElement>(null);
   const playbackRef = useRef<(() => void) | null>(null);
   const rotationRef = useRef(0);
+  const zoomRef = useRef(1);
   const rotateRef = useRef<((angle: number) => void) | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -200,7 +201,7 @@ export default function AvatarModel({
             Math.abs(motionBounds.max.x),
           ) +
             0.12) /
-            aspect,
+          aspect,
         );
         const canvasAspect = canvas.clientWidth / canvas.clientHeight;
         camera.left = -halfHeight * canvasAspect;
@@ -208,9 +209,53 @@ export default function AvatarModel({
         camera.top = halfHeight;
         camera.bottom = -halfHeight;
         camera.position.y = (top + bottom) / 2;
+        camera.zoom = zoomRef.current;
         camera.updateProjectionMatrix();
         nextRenderer.render(scene, camera);
       };
+      const hero = host.closest("section");
+      let pinch: { distance: number; zoom: number; } | null = null;
+      const heroTouches = (event: TouchEvent) =>
+        Array.from(event.touches).filter((touch) =>
+          hero?.contains(touch.target as Node),
+        );
+      const touchDistance = (touches: Touch[]) =>
+        Math.hypot(
+          touches[0].clientX - touches[1].clientX,
+          touches[0].clientY - touches[1].clientY,
+        );
+      const startPinch = (event: TouchEvent) => {
+        pinch = null;
+        const touches = heroTouches(event);
+        if (touches.length !== 2) return;
+        const distance = touchDistance(touches);
+        if (!distance) return;
+        if (event.cancelable) event.preventDefault();
+        pinch = { distance, zoom: zoomRef.current };
+        dragRef.current = null;
+        setDragging(false);
+      };
+      const movePinch = (event: TouchEvent) => {
+        const touches = heroTouches(event);
+        if (!pinch || touches.length !== 2) return;
+        if (event.cancelable) event.preventDefault();
+        zoomRef.current = Math.min(
+          3,
+          Math.max(1, (pinch.zoom * touchDistance(touches)) / pinch.distance),
+        );
+        canvas.dataset.zoom = String(zoomRef.current);
+        draw();
+      };
+      const endPinch = () => {
+        pinch = null;
+      };
+      // Cancel only two-finger gestures so one-finger scrolling stays native.
+      const touchOptions = { passive: false, signal: abort.signal };
+      hero?.addEventListener("touchstart", startPinch, touchOptions);
+      hero?.addEventListener("touchmove", movePinch, touchOptions);
+      hero?.addEventListener("touchend", endPinch, { signal: abort.signal });
+      hero?.addEventListener("touchcancel", endPinch, { signal: abort.signal });
+      canvas.dataset.zoom = String(zoomRef.current);
       rotateRef.current = (angle) => {
         turntable.rotation.y = angle;
         motionBounds.makeEmpty();
@@ -331,8 +376,7 @@ export default function AvatarModel({
             type="button"
             aria-label={t("hero.rotateModel")}
             aria-describedby="model-rotation-instructions"
-            title={t("hero.rotationHint")}
-            className={`pointer-events-auto absolute inset-x-0 top-1/5 h-7/10 touch-pan-y touch-pinch-zoom rounded-3xl select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+            className={`pointer-events-auto absolute inset-x-0 top-1/5 h-7/10 touch-pan-y rounded-3xl select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
             onPointerDown={(event) => {
               if (!event.isPrimary || event.button !== 0) return;
               dragRef.current = {
@@ -356,7 +400,7 @@ export default function AvatarModel({
               }
               rotate(
                 drag.angle +
-                  (dx / event.currentTarget.clientWidth) * Math.PI * 2,
+                (dx / event.currentTarget.clientWidth) * Math.PI * 2,
               );
             }}
             onPointerUp={(event) => {
@@ -384,7 +428,7 @@ export default function AvatarModel({
                 event.key === "Home"
                   ? 0
                   : rotationRef.current +
-                      (event.key === "ArrowLeft" ? -step : step),
+                  (event.key === "ArrowLeft" ? -step : step),
               );
             }}
             onClick={(event) => {

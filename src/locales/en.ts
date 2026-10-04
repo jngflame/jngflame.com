@@ -26,9 +26,8 @@ export const en = {
     modelLoading: "Loading 3D character…",
     modelError: "Unable to display the 3D character.",
     rotateModel: "Rotate the 3D character",
-    rotationHint: "Drag left or right to rotate",
     rotationInstructions:
-      "Drag left or right to rotate. Use the left and right arrow keys when focused. Double-click, Home or Enter returns to the front view.",
+      "Drag left or right to rotate. On mobile, spread two fingers to zoom in up to 3× and pinch to return to the original size. Use the left and right arrow keys when focused. Double-click, Home or Enter returns to the front view.",
     language: "Language",
     dance: "Dance",
     stopDancing: "Stop dancing",
