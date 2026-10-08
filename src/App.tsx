@@ -1,6 +1,8 @@
+import LiquidGlass from "liquid-glass-react";
 import {
   type AnchorHTMLAttributes,
   lazy,
+  type ReactNode,
   Suspense,
   useEffect,
   useLayoutEffect,
@@ -9,12 +11,18 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { CloudSky } from "./components/CloudSky";
 import { jordanArticle } from "./data/articles";
+import { type HeroModel, heroModels } from "./data/heroModels";
 import { inventory } from "./data/inventory";
 import { supportedLanguages } from "./i18n";
 
 const AvatarModel = lazy(() => import("./components/AvatarModel"));
+const CloudSky = lazy(() =>
+  import("./components/CloudSky").then((module) => ({
+    default: module.CloudSky,
+  })),
+);
+type HeroBackground = "clouds" | "windows-xp";
 
 type Page = "index" | "articles" | "inventory" | "detail" | "missing";
 const asset = (name: string) => `/${name}`;
@@ -24,8 +32,7 @@ const pagePaths = {
   articles: "/articles",
   inventory: "/inventory",
 };
-const linkStyle =
-  "transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-4";
+const linkStyle = "transition-opacity hover:opacity-60";
 let isLinkNavigation = false;
 
 function subscribe(callback: () => void) {
@@ -82,7 +89,7 @@ function Link({
   );
 }
 
-function Divider({ compact = false }: { compact?: boolean; }) {
+function Divider({ compact = false }: { compact?: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -108,7 +115,7 @@ function Divider({ compact = false }: { compact?: boolean; }) {
   );
 }
 
-function Footer({ compact = false }: { compact?: boolean; }) {
+function Footer({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   return (
     <footer className="mx-auto w-full max-w-170 px-5 pb-18">
@@ -136,12 +143,13 @@ function Footer({ compact = false }: { compact?: boolean; }) {
   );
 }
 
-function Navigation({ page }: { page: Page; }) {
+function Navigation({ page }: { page: Page }) {
   const { t } = useTranslation();
+
   return (
     <nav
       aria-label={t("navigation.label")}
-      className="top-0 z-20 bg-white"
+      className="site-navigation sticky top-0 z-20 bg-white"
     >
       <div className="mx-auto flex max-w-170 font-orbiter">
         <div className="px-5 py-2.5 flex-1">
@@ -155,7 +163,7 @@ function Navigation({ page }: { page: Page; }) {
           </Link>
         </div>
 
-        <div className="px-5 py-2.5 flex-1 text-center">
+        <div className="py-2.5 flex-1 text-center">
           <Link
             key={"articles"}
             href={`${pagePaths.articles}#content`}
@@ -180,8 +188,55 @@ function Navigation({ page }: { page: Page; }) {
   );
 }
 
-function Hero({ page }: { page: Page; }) {
+function HeroTool({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`hero-tool relative ${wide ? "hero-tool-language" : ""}`}>
+      <LiquidGlass
+        displacementScale={32}
+        blurAmount={0.1}
+        saturation={140}
+        aberrationIntensity={1.5}
+        elasticity={0.4}
+        cornerRadius={100}
+        padding="0"
+        style={{ position: "absolute", top: "50%", left: "50%" }}
+      >
+        <div
+          className={`relative flex h-10 items-center justify-center ${wide ? "w-18" : "w-10.5"}`}
+        >
+          {children}
+        </div>
+      </LiquidGlass>
+    </div>
+  );
+}
+
+function Hero({ page }: { page: Page }) {
   const { t, i18n } = useTranslation();
+  const [background, setBackground] = useState<HeroBackground>(() =>
+    Math.random() < 0.5 ? "clouds" : "windows-xp",
+  );
+  const [model, setModel] = useState<HeroModel>(
+    () => heroModels[Math.floor(Math.random() * heroModels.length)],
+  );
+  useLayoutEffect(() => {
+    const style = document.documentElement.style;
+    const previousColor = style.getPropertyValue("--hero-edge-color");
+    style.setProperty(
+      "--hero-edge-color",
+      background === "clouds" ? "#144895" : "#3f82fd",
+    );
+    return () => {
+      if (previousColor) style.setProperty("--hero-edge-color", previousColor);
+      else style.removeProperty("--hero-edge-color");
+    };
+  }, [background]);
   const [musicVisible, setMusicVisible] = useState(true);
   const [animations, setAnimations] = useState<string[]>([]);
   const [animation, setAnimation] = useState("idle");
@@ -190,12 +245,7 @@ function Hero({ page }: { page: Page; }) {
   );
   const [motionRequested, setMotionRequested] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
-  const [controlsOpen, setControlsOpen] = useState(false);
   const [modelReady, setModelReady] = useState(false);
-  const controlsButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (controlsOpen) document.getElementById("animation")?.focus();
-  }, [controlsOpen]);
   const hasTools = page !== "index";
   const animationLabels: Record<string, string> = t("hero.animations", {
     returnObjects: true,
@@ -208,12 +258,26 @@ function Hero({ page }: { page: Page; }) {
       ? t("hero.animationVariant", { name: label, number: Number(variant[2]) })
       : label;
   };
+  const animationOptions = animations
+    .map((name) => ({ name, label: animationLabel(name) }))
+    .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
   return (
     <section
       aria-label={t("hero.label")}
-      className="hero relative isolate overflow-hidden bg-sky-800"
+      className="hero relative isolate overflow-hidden"
     >
-      <CloudSky />
+      {background === "clouds" ? (
+        <Suspense fallback={null}>
+          <CloudSky />
+        </Suspense>
+      ) : (
+        <img
+          src="/wallpaper/windows-xp.jpg"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-full object-cover"
+        />
+      )}
       <div className="hero-scene pointer-events-none absolute top-1/2 left-1/2 max-w-full -translate-x-1/2 -translate-y-1/2 mix-blend-multiply" />
       <div className="hero-scene pointer-events-none absolute top-1/2 left-1/2 max-w-full -translate-x-1/2 -translate-y-1/2">
         <Suspense
@@ -227,17 +291,25 @@ function Hero({ page }: { page: Page; }) {
           }
         >
           <AvatarModel
+            modelUrl={asset(model)}
             animation={animation}
             playing={playing}
             motionRequested={motionRequested}
             replayKey={replayKey}
             onAnimationsChange={setAnimations}
             onReadyChange={setModelReady}
+            onAnimationChange={setAnimation}
           />
         </Suspense>
       </div>
-      <div className="absolute inset-x-0 top-6 mx-auto flex max-w-170 items-start justify-between px-5">
-        <div className="relative flex items-center rounded-full bg-white/30">
+      <div aria-hidden="true" className="hero-top-blur">
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="hero-controls absolute inset-x-0 top-8 mx-auto flex max-w-170 items-start justify-between px-5">
+        <HeroTool wide>
           <label htmlFor="language" className="sr-only">
             {t("hero.language")}
           </label>
@@ -247,7 +319,7 @@ function Hero({ page }: { page: Page; }) {
             onChange={(event) => {
               void i18n.changeLanguage(event.target.value);
             }}
-            className="cursor-pointer appearance-none rounded-full py-2 pr-9 pl-3.5 leading-6 text-black/80 focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="size-full cursor-pointer appearance-none rounded-full bg-transparent py-2 pr-9 pl-3.5 font-sans text-base leading-6 text-black/80"
           >
             {supportedLanguages.map((language) => (
               <option key={language} value={language}>
@@ -262,99 +334,86 @@ function Hero({ page }: { page: Page; }) {
             height={14}
             className="pointer-events-none absolute right-3.5"
           />
-        </div>
+        </HeroTool>
         <div className="relative flex flex-col gap-4">
-          <button
-            ref={controlsButtonRef}
-            type="button"
-            aria-label={t("hero.animationControls")}
-            aria-expanded={controlsOpen}
-            aria-controls="animation-controls"
-            disabled={!modelReady}
-            onClick={() => setControlsOpen(!controlsOpen)}
-            className="hero-tool"
-          >
-            <img src={asset("d1dae.svg")} alt="" width={24} height={24} />
-          </button>
-          {hasTools && !controlsOpen && (
-            <>
-              <Link
-                href="/inventory#content"
-                aria-label={t("hero.viewInventory")}
-                className="hero-tool"
-              >
-                <img src={asset("0c976.svg")} alt="" width={24} height={24} />
-              </Link>
-              <Link
-                href="/#profile-photo"
-                aria-label={t("hero.viewProfilePhoto")}
-                className="hero-tool"
-              >
-                <img src={asset("70920.svg")} alt="" width={24} height={24} />
-              </Link>
-            </>
-          )}
-          {controlsOpen && (
-            <fieldset
-              id="animation-controls"
+          <HeroTool>
+            <select
+              id="animation"
               aria-label={t("hero.animationControls")}
-              className="absolute top-14 right-0 z-10 w-64 min-w-0 rounded-3xl bg-white/90 p-4 font-orbiter shadow-lg backdrop-blur-sm"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setControlsOpen(false);
-                  controlsButtonRef.current?.focus();
-                }
+              value=""
+              disabled={!modelReady}
+              onChange={(event) => {
+                setAnimation(event.target.value);
+                setPlaying(true);
+                setMotionRequested(true);
+                setReplayKey((value) => value + 1);
               }}
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
             >
-              <label
-                htmlFor="animation"
-                className="mb-2 block text-sm text-black/60"
-              >
-                {t("hero.animationCount", { count: animations.length })}
-              </label>
-              <select
-                id="animation"
-                value={animation}
-                onChange={(event) => {
-                  setAnimation(event.target.value);
-                  setPlaying(true);
-                  setMotionRequested(true);
-                  setReplayKey((value) => value + 1);
-                }}
-                className="w-full cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-black focus-visible:outline-2 focus-visible:outline-offset-2"
-              >
-                {animations.map((name) => (
-                  <option key={name} value={name}>
-                    {animationLabel(name)}
-                  </option>
-                ))}
-              </select>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  aria-pressed={!playing}
-                  onClick={() => {
-                    setPlaying(!playing);
-                    setMotionRequested(true);
-                  }}
-                  className={`flex-1 cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-sm ${linkStyle}`}
-                >
-                  {t(playing ? "hero.pauseAnimation" : "hero.playAnimation")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlaying(true);
-                    setMotionRequested(true);
-                    setReplayKey((value) => value + 1);
-                  }}
-                  className={`flex-1 cursor-pointer rounded-xl bg-black/5 px-3 py-2 text-sm ${linkStyle}`}
-                >
-                  {t("hero.replayAnimation")}
-                </button>
-              </div>
-            </fieldset>
-          )}
+              <option value="" disabled>
+                {t("hero.animationControls")}
+              </option>
+              {animationOptions.map(({ name, label }) => (
+                <option key={name} value={name}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <img
+              src={asset("d1dae.svg")}
+              alt=""
+              width={24}
+              height={24}
+              className="pointer-events-none"
+            />
+          </HeroTool>
+          <HeroTool>
+            <select
+              aria-label={t("hero.modelControls")}
+              value={model}
+              onChange={(event) => {
+                if (event.target.value === model) return;
+                setModelReady(false);
+                setAnimations([]);
+                setAnimation("idle");
+                setModel(event.target.value as HeroModel);
+              }}
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
+            >
+              {heroModels.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <img
+              src={asset("0c976.svg")}
+              alt=""
+              width={24}
+              height={24}
+              className="pointer-events-none"
+            />
+          </HeroTool>
+          <HeroTool>
+            <select
+              aria-label={t("hero.backgroundControls")}
+              value={background}
+              onChange={(event) => {
+                setBackground(event.target.value as HeroBackground);
+              }}
+              className="absolute inset-0 size-full cursor-pointer opacity-0"
+            >
+              <option value="clouds">{t("hero.backgroundClouds")}</option>
+              <option value="windows-xp">Windows XP</option>
+            </select>
+            <img
+              src={asset("70920.svg")}
+              alt=""
+              width={24}
+              height={24}
+              className="pointer-events-none"
+            />
+          </HeroTool>
         </div>
       </div>
       {hasTools && musicVisible && (
@@ -374,7 +433,7 @@ function Hero({ page }: { page: Page; }) {
             type="button"
             aria-label={t("hero.dismissMusic")}
             onClick={() => setMusicVisible(false)}
-            className="cursor-pointer rounded-full focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="cursor-pointer rounded-full"
           >
             <img src={asset("21823.svg")} alt="" width={16} height={16} />
           </button>
@@ -389,7 +448,7 @@ function IndexPage() {
   return (
     <main
       id="content"
-      className="mx-auto w-full max-w-170 scroll-mt-11 px-5 pt-13.5 text-center"
+      className="mx-auto w-full max-w-170 scroll-mt-11 px-5 pt-24 text-center"
     >
       <h1 className="text-profile leading-15 font-semibold sm:text-5xl">
         {t("profile.name")}
@@ -523,7 +582,7 @@ function InventoryPage() {
     <main
       id="content"
       aria-label={t("navigation.inventory")}
-      className="mx-auto w-full max-w-100.5 scroll-mt-11"
+      className="mx-auto w-full max-w-100.5 scroll-mt-11 px-5"
     >
       <div className="inventory-collage relative overflow-hidden">
         {inventory.map((item) => (
@@ -535,7 +594,7 @@ function InventoryPage() {
             })}
             data-node-id={item.node}
             onClick={() => setSelected(item)}
-            className="inventory-item absolute flex cursor-zoom-in items-center justify-center focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="inventory-item absolute flex cursor-zoom-in items-center justify-center focus-visible:z-10"
             style={{
               left: `${(item.x / 402) * 100}%`,
               top: `${(item.y / 1431) * 100}%`,
@@ -618,7 +677,7 @@ function ArticleDetail() {
         >
           {t("article.metadata", { months: 3, minutes: 12 })}
         </p>
-        <div className="mt-8 text-justify text-base leading-7.2 text-black/80">
+        <div className="mt-8 text-justify text-base md:text-lg leading-[1.8] md:leading-loose text-black/80">
           {jordanArticle.map((paragraph) => (
             <p key={paragraph}>{paragraph}</p>
           ))}
@@ -638,6 +697,12 @@ function App() {
   const page = getPage(path);
   const previousPath = useRef(path);
   const isDetail = page === "detail" || page === "missing";
+  useLayoutEffect(() => {
+    document.documentElement.dataset.page = page;
+    return () => {
+      delete document.documentElement.dataset.page;
+    };
+  }, [page]);
   useEffect(() => {
     document.documentElement.lang = language;
     const titles = {
@@ -682,7 +747,7 @@ function App() {
       {page === "inventory" && <InventoryPage />}
       {page === "detail" && <ArticleDetail />}
       {page === "missing" && (
-        <main id="content" className="mx-auto max-w-170 px-6 py-20">
+        <main id="content" className="mx-auto max-w-170 px-5 py-20">
           <h1 className="text-2xl">{t("missing.title")}</h1>
           <Link href="/" className="mt-6 inline-block underline">
             {t("missing.backToIndex")}

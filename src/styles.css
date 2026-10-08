@@ -8,11 +8,42 @@
   --text-profile: 2.5rem;
 }
 
+*:focus {
+  --tw-outline-style: none;
+  outline-style: none;
+}
+
+:root {
+  --hero-edge-color: white;
+}
+
 html {
   color-scheme: light;
   font-family: var(--font-sans);
-  background: white;
+  background-color: white;
   -webkit-font-smoothing: antialiased;
+}
+
+html[data-browser="safari"] {
+  background-color: var(--hero-edge-color);
+}
+
+html[data-page="detail"] {
+  --html-background-color: white;
+  background-color: white;
+}
+
+html[data-ios-safari="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--html-background-color, var(--hero-edge-color))
+      var(--html-background-opacity, 100%),
+    transparent
+  );
+}
+
+html[data-ios-safari="true"] .site-navigation {
+  position: static;
 }
 
 button,
@@ -21,13 +52,93 @@ select {
   -webkit-tap-highlight-color: transparent;
 }
 .hero {
-  --hero-height: max(37.5rem, calc(100svh - 2.75rem));
+  --hero-height: calc(100dvh - 2.75rem);
   height: var(--hero-height);
 }
 .hero-scene {
   width: calc(var(--hero-height) * 402 / 830);
   aspect-ratio: 402 / 830;
 }
+.hero-top-blur {
+  display: none;
+}
+
+/* Keep the transition inside the hero so it scrolls away with the sky. */
+@supports (-webkit-touch-callout: none) or
+  (-webkit-backdrop-filter: blur(1rem)) {
+  .hero-controls {
+    top: calc(env(safe-area-inset-top, 0rem) + 1.5rem);
+    padding-left: max(1.25rem, env(safe-area-inset-left, 0rem));
+    padding-right: max(1.25rem, env(safe-area-inset-right, 0rem));
+    z-index: 2;
+  }
+
+  .hero-top-blur {
+    display: block;
+    position: absolute;
+    inset: 0 0 auto;
+    height: calc(env(safe-area-inset-top, 0rem) + 4rem);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .hero-top-blur::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      var(--hero-edge-color) 0,
+      var(--hero-edge-color) env(safe-area-inset-top, 0rem),
+      transparent 100%
+    );
+  }
+
+  /* Overlapping masks reduce the blur radius toward the clear hero below. */
+  .hero-top-blur > span {
+    position: absolute;
+    inset: 0;
+    -webkit-backdrop-filter: blur(var(--blur-radius));
+    backdrop-filter: blur(var(--blur-radius));
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      black 0%,
+      black var(--blur-start),
+      transparent var(--blur-end)
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      black 0%,
+      black var(--blur-start),
+      transparent var(--blur-end)
+    );
+  }
+
+  .hero-top-blur > span:nth-child(1) {
+    --blur-radius: 0.25rem;
+    --blur-start: 70%;
+    --blur-end: 100%;
+  }
+
+  .hero-top-blur > span:nth-child(2) {
+    --blur-radius: 0.5rem;
+    --blur-start: 45%;
+    --blur-end: 80%;
+  }
+
+  .hero-top-blur > span:nth-child(3) {
+    --blur-radius: 1rem;
+    --blur-start: 20%;
+    --blur-end: 60%;
+  }
+
+  .hero-top-blur > span:nth-child(4) {
+    --blur-radius: 2rem;
+    --blur-start: 0%;
+    --blur-end: 40%;
+  }
+}
+
 .hero-tool {
   display: flex;
   width: 2.625rem;
@@ -35,20 +146,39 @@ select {
   align-items: center;
   justify-content: center;
   border-radius: 6.25rem;
-  background: rgb(255 255 255 / 0.5);
   cursor: pointer;
 }
-.hero-tool:hover {
-  background: rgb(255 255 255 / 0.75);
+.hero-tool-language {
+  width: 4.5rem;
 }
-.hero-tool:disabled {
+.hero-tool .glass {
+  background-color: rgb(255 255 255 / 0.4);
+}
+.hero-tool .glass__warp {
+  -webkit-backdrop-filter: blur(0.41rem) saturate(140%);
+}
+.hero-tool:has(select:disabled),
+.hero-tool select:disabled {
   cursor: wait;
-  opacity: 0.4;
 }
-.hero-tool:focus-visible {
-  outline: 0.125rem solid currentColor;
-  outline-offset: 0.25rem;
+.hero-tool:has(select:disabled) {
+  opacity: 0.45;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-tool > div,
+  .hero-tool > span {
+    /* biome-ignore lint/complexity/noImportantStyles: Override the library's inline motion for reduced-motion preferences. */
+    transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Preserve centering while disabling the library's inline elastic transform. */
+    transform: translate(-50%, -50%) !important;
+  }
+  .hero-tool .glass {
+    /* biome-ignore lint/complexity/noImportantStyles: The library sets this transition inline. */
+    transition: none !important;
+  }
+}
+
 .inventory-collage {
   aspect-ratio: 402 / 1431;
 }

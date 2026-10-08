@@ -11,7 +11,7 @@ interface Texture {
 interface Device {
   destroy(): void;
   lost: Promise<unknown>;
-  queue: { onSubmittedWorkDone(): Promise<void>; };
+  queue: { onSubmittedWorkDone(): Promise<void> };
 }
 interface CanvasContext {
   configure(options: {
@@ -23,7 +23,7 @@ interface CanvasContext {
   unconfigure(): void;
 }
 interface Gpu {
-  requestAdapter(): Promise<{ requestDevice(): Promise<Device>; } | null>;
+  requestAdapter(): Promise<{ requestDevice(): Promise<Device> } | null>;
   getPreferredCanvasFormat(): string;
 }
 
@@ -69,7 +69,7 @@ export function CloudSky() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const gpu = (navigator as Navigator & { gpu?: Gpu; }).gpu;
+    const gpu = (navigator as Navigator & { gpu?: Gpu }).gpu;
     if (!canvas || !gpu) return;
     let disposed = false;
     let device: Device | undefined;

@@ -8,52 +8,35 @@ import {
   DirectionalLight,
   Group,
   HemisphereLight,
-  Mesh,
+  LoopOnce,
+  LoopRepeat,
   OrthographicCamera,
   Scene,
-  SkinnedMesh,
-  Texture,
   Vector3,
   WebGLRenderer,
 } from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { disposeModel, loadModel } from "../lib/models";
 
-function disposeModel(model: Group) {
-  const textures = new Set<Texture>();
-  model.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    object.geometry.dispose();
-    if (object instanceof SkinnedMesh) object.skeleton.dispose();
-    const materials = Array.isArray(object.material)
-      ? object.material
-      : [object.material];
-    for (const material of materials) {
-      for (const value of Object.values(material)) {
-        if (value instanceof Texture) textures.add(value);
-      }
-      material.dispose();
-    }
-  });
-  for (const texture of textures) {
-    texture.dispose();
-    if (texture.image instanceof ImageBitmap) texture.image.close();
-  }
-}
+const idleReturnDuration = 0.8;
 
 export default function AvatarModel({
+  modelUrl,
   animation,
   playing,
   motionRequested,
   replayKey,
   onAnimationsChange,
   onReadyChange,
+  onAnimationChange,
 }: {
+  modelUrl: string;
   animation: string;
   playing: boolean;
   motionRequested: boolean;
   replayKey: number;
   onAnimationsChange: (names: string[]) => void;
   onReadyChange: (ready: boolean) => void;
+  onAnimationChange: (name: string) => void;
 }) {
   const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -92,6 +75,10 @@ export default function AvatarModel({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    setStatus("loading");
+    setDragging(false);
+    onReadyChange(false);
+    onAnimationsChange([]);
     const abort = new AbortController();
     const motionPreference = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -113,16 +100,11 @@ export default function AvatarModel({
       nextRenderer.setClearColor(0x000000, 0);
       const canvas = nextRenderer.domElement;
       canvas.setAttribute("aria-hidden", "true");
+      canvas.dataset.model = modelUrl;
       canvas.className = "absolute inset-0 size-full";
       host?.append(canvas);
 
-      const response = await fetch("/outdoor.glb", { signal: abort.signal });
-      if (!response.ok)
-        throw new Error(`Model request failed: ${response.status}`);
-      const gltf = await new GLTFLoader().parseAsync(
-        await response.arrayBuffer(),
-        "/",
-      );
+      const gltf = await loadModel(modelUrl, abort.signal);
       if (disposed) {
         disposeModel(gltf.scene);
         return;
@@ -152,6 +134,22 @@ export default function AvatarModel({
       let current: AnimationAction = animationMixer.clipAction(
         idleClip ?? gltf.animations[0],
       );
+      for (const [name, action] of actions) {
+        action.setLoop(
+          name === "idle" ? LoopRepeat : LoopOnce,
+          name === "idle" ? Infinity : 1,
+        );
+        action.clampWhenFinished = name !== "idle";
+      }
+      animationMixer.addEventListener("finished", (event) => {
+        if (
+          disposed ||
+          event.action !== current ||
+          current.getClip().name === "idle"
+        )
+          return;
+        onAnimationChange("idle");
+      });
       let lastReplayKey = selectionRef.current.replayKey;
       current.play();
       mixer.update(0);
@@ -179,7 +177,8 @@ export default function AvatarModel({
       const bonePosition = new Vector3();
       const motionBounds = new Box3();
       let aspect = 1;
-      const draw = () => {
+      let cameraHalfHeight: number | undefined;
+      const draw = (delta = 0) => {
         turntable.updateMatrixWorld(true);
         // Keep locomotion centered while preserving jumps and body movement.
         if (rootBone && rootAnchor) {
@@ -189,6 +188,9 @@ export default function AvatarModel({
           stage.position.z += rootAnchor.z - bonePosition.z;
           stage.updateMatrixWorld(true);
         }
+        // Let the framing return with the blended idle pose instead of retaining
+        // the previous action's widest bounds.
+        if (current.getClip().name === "idle") motionBounds.makeEmpty();
         for (const bone of bones) {
           motionBounds.expandByPoint(bone.getWorldPosition(bonePosition));
         }
@@ -201,20 +203,50 @@ export default function AvatarModel({
             Math.abs(motionBounds.max.x),
           ) +
             0.12) /
-          aspect,
+            aspect,
         );
+        const blend =
+          cameraHalfHeight === undefined ||
+          motionPreference.matches ||
+          !selectionRef.current.playing
+            ? 1
+            : 1 - Math.exp((-3 * delta) / idleReturnDuration);
+        cameraHalfHeight =
+          (cameraHalfHeight ?? halfHeight) +
+          (halfHeight - (cameraHalfHeight ?? halfHeight)) * blend;
+        camera.position.y += ((top + bottom) / 2 - camera.position.y) * blend;
         const canvasAspect = canvas.clientWidth / canvas.clientHeight;
-        camera.left = -halfHeight * canvasAspect;
-        camera.right = halfHeight * canvasAspect;
-        camera.top = halfHeight;
-        camera.bottom = -halfHeight;
-        camera.position.y = (top + bottom) / 2;
+        camera.left = -cameraHalfHeight * canvasAspect;
+        camera.right = cameraHalfHeight * canvasAspect;
+        camera.top = cameraHalfHeight;
+        camera.bottom = -cameraHalfHeight;
         camera.zoom = zoomRef.current;
         camera.updateProjectionMatrix();
         nextRenderer.render(scene, camera);
       };
       const hero = host.closest("section");
-      let pinch: { distance: number; zoom: number; } | null = null;
+      const setZoom = (zoom: number) => {
+        zoomRef.current = Math.min(1.5, Math.max(0.5, zoom));
+        canvas.dataset.zoom = String(zoomRef.current);
+        draw();
+      };
+      const zoomWithWheel = (event: WheelEvent) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        if (event.cancelable) event.preventDefault();
+        const delta =
+          event.deltaY *
+          (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+            ? 16
+            : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+              ? (hero?.clientHeight ?? canvas.clientHeight)
+              : 1);
+        setZoom(zoomRef.current * Math.exp(-delta * 0.01));
+      };
+      hero?.addEventListener("wheel", zoomWithWheel, {
+        passive: false,
+        signal: abort.signal,
+      });
+      let pinch: { distance: number; zoom: number } | null = null;
       const heroTouches = (event: TouchEvent) =>
         Array.from(event.touches).filter((touch) =>
           hero?.contains(touch.target as Node),
@@ -239,12 +271,7 @@ export default function AvatarModel({
         const touches = heroTouches(event);
         if (!pinch || touches.length !== 2) return;
         if (event.cancelable) event.preventDefault();
-        zoomRef.current = Math.min(
-          3,
-          Math.max(1, (pinch.zoom * touchDistance(touches)) / pinch.distance),
-        );
-        canvas.dataset.zoom = String(zoomRef.current);
-        draw();
+        setZoom((pinch.zoom * touchDistance(touches)) / pinch.distance);
       };
       const endPinch = () => {
         pinch = null;
@@ -279,7 +306,7 @@ export default function AvatarModel({
           : 0;
         previousTime = time;
         mixer?.update(delta);
-        draw();
+        draw(delta);
       };
       updatePlayback = () => {
         previousTime = 0;
@@ -300,7 +327,9 @@ export default function AvatarModel({
         if (next !== current || restart) {
           next.reset().setEffectiveWeight(1).play();
           if (next !== current && !motionPreference.matches) {
-            next.crossFadeFrom(current, 0.35, false);
+            const duration =
+              selection.animation === "idle" ? idleReturnDuration : 0.35;
+            next.crossFadeFrom(current, duration, false);
           } else if (next !== current) {
             current.stop();
           }
@@ -359,7 +388,7 @@ export default function AvatarModel({
       renderer?.domElement.remove();
       onReadyChange(false);
     };
-  }, [onAnimationsChange, onReadyChange]);
+  }, [modelUrl, onAnimationsChange, onReadyChange, onAnimationChange]);
 
   return (
     <>
@@ -376,7 +405,7 @@ export default function AvatarModel({
             type="button"
             aria-label={t("hero.rotateModel")}
             aria-describedby="model-rotation-instructions"
-            className={`pointer-events-auto absolute inset-x-0 top-1/5 h-7/10 touch-pan-y rounded-3xl select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+            className={`pointer-events-auto absolute inset-x-0 top-1/5 h-7/10 touch-pan-y rounded-3xl select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
             onPointerDown={(event) => {
               if (!event.isPrimary || event.button !== 0) return;
               dragRef.current = {
@@ -400,7 +429,7 @@ export default function AvatarModel({
               }
               rotate(
                 drag.angle +
-                (dx / event.currentTarget.clientWidth) * Math.PI * 2,
+                  (dx / event.currentTarget.clientWidth) * Math.PI * 2,
               );
             }}
             onPointerUp={(event) => {
@@ -428,7 +457,7 @@ export default function AvatarModel({
                 event.key === "Home"
                   ? 0
                   : rotationRef.current +
-                  (event.key === "ArrowLeft" ? -step : step),
+                      (event.key === "ArrowLeft" ? -step : step),
               );
             }}
             onClick={(event) => {
