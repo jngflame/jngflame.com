@@ -27,7 +27,14 @@ interface YouTubeAPI {
       videoId: string;
       width: string;
       height: string;
-      playerVars: { origin: string; playsinline: number };
+      playerVars: {
+        origin: string;
+        playsinline: number;
+        controls: number;
+        disablekb: number;
+        iv_load_policy: number;
+        cc_load_policy: number;
+      };
       events: {
         onReady: (event: PlayerEvent) => void;
         onStateChange: (event: PlayerEvent) => void;

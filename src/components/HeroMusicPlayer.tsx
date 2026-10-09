@@ -1,4 +1,10 @@
-import { type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   giveItUpVideoId,
@@ -24,6 +30,15 @@ export default function HeroMusicPlayer({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(
+    null,
+  );
+  const [panelPosition, setPanelPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const callbacks = useRef({ onPlay, onEnded });
@@ -36,6 +51,39 @@ export default function HeroMusicPlayer({
   const [duration, setDuration] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const lastReplayKey = useRef(replayKey);
+
+  const movePanel = (x: number, y: number) => {
+    const panel = panelRef.current;
+    const hero = panel?.parentElement;
+    if (!panel || !hero) return;
+    setPanelPosition({
+      x: Math.max(0, Math.min(x, hero.clientWidth - panel.offsetWidth)),
+      y: Math.max(0, Math.min(y, hero.clientHeight - panel.offsetHeight)),
+    });
+  };
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const hero = panel?.parentElement;
+    if (!panel || !hero) return;
+    const observer = new ResizeObserver(() => {
+      setPanelPosition((current) => {
+        const panelRect = panel.getBoundingClientRect();
+        const heroRect = hero.getBoundingClientRect();
+        const x = current?.x ?? panelRect.left - heroRect.left;
+        const y = current?.y ?? panelRect.top - heroRect.top;
+        const next = {
+          x: Math.max(0, Math.min(x, hero.clientWidth - panel.offsetWidth)),
+          y: Math.max(0, Math.min(y, hero.clientHeight - panel.offsetHeight)),
+        };
+        if (next.x === x && next.y === y) return current;
+        return next;
+      });
+    });
+    observer.observe(hero);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     callbacks.current = { onPlay, onEnded };
@@ -82,7 +130,14 @@ export default function HeroMusicPlayer({
           videoId: giveItUpVideoId,
           width: "100%",
           height: "100%",
-          playerVars: { origin: window.location.origin, playsinline: 1 },
+          playerVars: {
+            origin: window.location.origin,
+            playsinline: 1,
+            controls: 0,
+            disablekb: 1,
+            iv_load_policy: 3,
+            cc_load_policy: 0,
+          },
           events: {
             onReady: ({ target }) => {
               if (disposed || failed) return;
@@ -137,20 +192,93 @@ export default function HeroMusicPlayer({
   }, [replayKey]);
 
   return (
-    <div className="absolute right-0 bottom-5 z-10 w-full max-w-90 px-5 font-orbiter">
+    <div
+      ref={panelRef}
+      className="absolute right-0 bottom-5 z-10 max-h-full w-89 overflow-y-auto font-orbiter"
+      style={
+        panelPosition
+          ? {
+              left: panelPosition.x,
+              top: panelPosition.y,
+              right: "auto",
+              bottom: "auto",
+            }
+          : undefined
+      }
+    >
       <div className="overflow-hidden rounded-4 bg-white/95 shadow-lg">
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-sm">Give It Up · YouTube</span>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            aria-label={t("hero.moveMusic")}
+            title={t("hero.moveMusic")}
+            className={`h-12 min-w-0 flex-1 touch-none px-3 text-left text-sm select-none ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+            onPointerDown={(event) => {
+              if (!event.isPrimary || event.button !== 0) return;
+              const panel = panelRef.current;
+              if (!panel) return;
+              const rect = panel.getBoundingClientRect();
+              dragRef.current = {
+                pointerId: event.pointerId,
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDragging(true);
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              const hero = panelRef.current?.parentElement;
+              if (!drag || drag.pointerId !== event.pointerId || !hero) return;
+              const rect = hero.getBoundingClientRect();
+              movePanel(
+                event.clientX - rect.left - drag.x,
+                event.clientY - rect.top - drag.y,
+              );
+            }}
+            onPointerUp={(event) => {
+              if (dragRef.current?.pointerId !== event.pointerId) return;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+              dragRef.current = null;
+              setDragging(false);
+            }}
+            onLostPointerCapture={() => {
+              dragRef.current = null;
+              setDragging(false);
+            }}
+            onKeyDown={(event) => {
+              const directions: Record<string, [number, number]> = {
+                ArrowLeft: [-1, 0],
+                ArrowRight: [1, 0],
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1],
+              };
+              const direction = directions[event.key];
+              const panel = panelRef.current;
+              const hero = panel?.parentElement;
+              if (!direction || !panel || !hero) return;
+              event.preventDefault();
+              const rect = panel.getBoundingClientRect();
+              const heroRect = hero.getBoundingClientRect();
+              const step = event.shiftKey ? 40 : 10;
+              movePanel(
+                rect.left - heroRect.left + direction[0] * step,
+                rect.top - heroRect.top + direction[1] * step,
+              );
+            }}
+          >
+            Give It Up · YouTube
+          </button>
           <button
             type="button"
             onClick={onClose}
             aria-label={t("hero.dismissMusic")}
-            className="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-black/10"
+            className="mr-3 flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-black/10"
           >
             <img src="/21823.svg" alt="" width={16} height={16} />
           </button>
         </div>
-        <div ref={hostRef} className="h-50 w-full bg-black" />
+        <div ref={hostRef} className="aspect-video w-full bg-black" />
         {status === "loading" && (
           <p role="status" className="px-3 py-2 text-xs">
             {t("hero.musicLoading")}

@@ -127,6 +127,7 @@ export const ko = {
     musicPlay: "재생",
     musicPause: "일시정지",
     musicPosition: "음악과 안무 재생 위치",
+    moveMusic: "음악 플레이어 이동 (드래그 또는 방향키)",
     dismissMusic: "음악 플레이어 닫기",
   },
   footer: { email: "이메일" },

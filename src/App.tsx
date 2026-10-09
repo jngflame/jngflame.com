@@ -157,7 +157,9 @@ function HeroTool({
   wide?: boolean;
 }) {
   return (
-    <div className={`hero-tool relative ${wide ? "hero-tool-language" : ""}`}>
+    <div
+      className={`hero-tool pointer-events-auto relative ${wide ? "hero-tool-language" : ""}`}
+    >
       <LiquidGlass
         displacementScale={32}
         blurAmount={0.1}
@@ -306,7 +308,7 @@ function Hero({
         <span />
         <span />
       </div>
-      <div className="hero-controls absolute inset-x-0 top-8 mx-auto flex max-w-170 items-start justify-between px-5">
+      <div className="hero-controls pointer-events-none absolute inset-x-0 top-8 z-20 mx-auto flex max-w-170 items-start justify-between px-5">
         <HeroTool wide>
           <label htmlFor="language" className="sr-only">
             {t("hero.language")}

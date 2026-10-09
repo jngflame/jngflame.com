@@ -124,6 +124,7 @@ export const en = {
     musicPlay: "Play",
     musicPause: "Pause",
     musicPosition: "Music and choreography playback position",
+    moveMusic: "Move music player (drag or use arrow keys)",
     dismissMusic: "Dismiss music",
   },
   footer: { email: "email" },
