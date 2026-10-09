@@ -55,6 +55,10 @@ select {
   --hero-height: calc(100dvh - 2.75rem);
   height: var(--hero-height);
 }
+html[data-ios-safari="true"] .hero {
+  /* Keep hero and model sizing stable as Safari's toolbars expand or collapse. */
+  --hero-height: calc(100svh - 2.75rem);
+}
 .hero-scene {
   width: calc(var(--hero-height) * 402 / 830);
   aspect-ratio: 402 / 830;
