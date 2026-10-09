@@ -1,7 +1,7 @@
 // Add models here to include them in random selection and the model menu.
 export const heroModels = [
-  "outdoor.glb",
-  "outdoor2.glb",
+  "kapadokya.glb",
+  "altin-arasan.glb",
   "dog-walking.glb",
 ] as const;
 

@@ -22,21 +22,25 @@ const idleReturnDuration = 0.8;
 export default function AvatarModel({
   modelUrl,
   animation,
+  animationStartTime,
   playing,
   motionRequested,
   replayKey,
   onAnimationsChange,
   onReadyChange,
   onAnimationChange,
+  onError,
 }: {
   modelUrl: string;
   animation: string;
+  animationStartTime: number;
   playing: boolean;
   motionRequested: boolean;
   replayKey: number;
   onAnimationsChange: (names: string[]) => void;
   onReadyChange: (ready: boolean) => void;
   onAnimationChange: (name: string) => void;
+  onError: () => void;
 }) {
   const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -59,6 +63,7 @@ export default function AvatarModel({
   };
   const selectionRef = useRef({
     animation,
+    animationStartTime,
     playing,
     motionRequested,
     replayKey,
@@ -68,9 +73,15 @@ export default function AvatarModel({
   );
 
   useEffect(() => {
-    selectionRef.current = { animation, playing, motionRequested, replayKey };
+    selectionRef.current = {
+      animation,
+      animationStartTime,
+      playing,
+      motionRequested,
+      replayKey,
+    };
     playbackRef.current?.();
-  }, [animation, playing, motionRequested, replayKey]);
+  }, [animation, animationStartTime, playing, motionRequested, replayKey]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -326,7 +337,14 @@ export default function AvatarModel({
         const restart = selection.replayKey !== lastReplayKey;
         if (next !== current || restart) {
           next.reset().setEffectiveWeight(1).play();
-          if (next !== current && !motionPreference.matches) {
+          next.time =
+            selection.animation === "idle" ? 0 : selection.animationStartTime;
+          if (
+            next !== current &&
+            !motionPreference.matches &&
+            (selection.animation === "idle" ||
+              selection.animationStartTime === 0)
+          ) {
             const duration =
               selection.animation === "idle" ? idleReturnDuration : 0.35;
             next.crossFadeFrom(current, duration, false);
@@ -365,6 +383,7 @@ export default function AvatarModel({
       renderer?.setAnimationLoop(null);
       setStatus("error");
       onReadyChange(false);
+      onError();
     });
 
     return () => {
@@ -388,7 +407,7 @@ export default function AvatarModel({
       renderer?.domElement.remove();
       onReadyChange(false);
     };
-  }, [modelUrl, onAnimationsChange, onReadyChange, onAnimationChange]);
+  }, [modelUrl, onAnimationsChange, onReadyChange, onAnimationChange, onError]);
 
   return (
     <>

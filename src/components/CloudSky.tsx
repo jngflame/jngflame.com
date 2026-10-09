@@ -64,13 +64,16 @@ const params = {
   evolution: 0,
 };
 
-export function CloudSky() {
+export function CloudSky({ onReady }: { onReady: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const gpu = (navigator as Navigator & { gpu?: Gpu }).gpu;
-    if (!canvas || !gpu) return;
+    if (!canvas || !gpu) {
+      onReady();
+      return;
+    }
     let disposed = false;
     let device: Device | undefined;
     let observer: ResizeObserver | undefined;
@@ -79,7 +82,11 @@ export function CloudSky() {
 
     async function initialize() {
       const adapter = await gpu?.requestAdapter();
-      if (!adapter || disposed || !canvas || !gpu) return;
+      if (disposed || !canvas || !gpu) return;
+      if (!adapter) {
+        onReady();
+        return;
+      }
       const nextDevice = await adapter.requestDevice();
       if (disposed) {
         nextDevice.destroy();
@@ -89,7 +96,10 @@ export function CloudSky() {
       context = canvas.getContext("webgpu") as unknown as
         | CanvasContext
         | undefined;
-      if (!context) return;
+      if (!context) {
+        onReady();
+        return;
+      }
       const format = gpu.getPreferredCanvasFormat();
       context.configure({ device, format, alphaMode: "premultiplied" });
       const state = {};
@@ -113,7 +123,10 @@ export function CloudSky() {
           },
         });
         void device.queue.onSubmittedWorkDone().then(() => {
-          if (!disposed) canvas.dataset.ready = "true";
+          if (!disposed) {
+            canvas.dataset.ready = "true";
+            onReady();
+          }
         });
       };
       draw();
@@ -127,8 +140,10 @@ export function CloudSky() {
       });
     }
     void initialize().catch(() => {
+      if (disposed) return;
       // Keep the blue backdrop readable if GPU access is unavailable.
       delete canvas.dataset.ready;
+      onReady();
     });
     return () => {
       disposed = true;
@@ -137,7 +152,7 @@ export function CloudSky() {
       context?.unconfigure();
       device?.destroy();
     };
-  }, []);
+  }, [onReady]);
 
   return (
     <canvas
@@ -145,6 +160,7 @@ export function CloudSky() {
       aria-hidden="true"
       tabIndex={-1}
       className="absolute inset-0 size-full"
+      style={{ backgroundColor: "#144895" }}
     />
   );
 }

@@ -24,26 +24,9 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-html[data-browser="safari"] {
-  background-color: var(--hero-edge-color);
-}
-
 html[data-page="detail"] {
   --html-background-color: white;
   background-color: white;
-}
-
-html[data-ios-safari="true"] {
-  background-color: color-mix(
-    in srgb,
-    var(--html-background-color, var(--hero-edge-color))
-      var(--html-background-opacity, 100%),
-    transparent
-  );
-}
-
-html[data-ios-safari="true"] .site-navigation {
-  position: static;
 }
 
 button,
@@ -55,8 +38,32 @@ select {
   --hero-height: calc(100dvh - 2.75rem);
   height: var(--hero-height);
 }
+
+.loading-screen {
+  transform: translateY(0);
+  transition: transform 800ms cubic-bezier(0.76, 0, 0.24, 1);
+}
+.loading-screen[data-exiting="true"] {
+  transform: translateY(-100%);
+}
+.loading-indicator {
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+@keyframes loading-pulse {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.65);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen {
+    transition-duration: 1ms;
+  }
+  .loading-indicator {
+    animation: none;
+  }
+}
 html[data-ios-safari="true"] .hero {
-  /* Keep hero and model sizing stable as Safari's toolbars expand or collapse. */
   --hero-height: calc(100svh - 2.75rem);
 }
 .hero-scene {
@@ -65,82 +72,6 @@ html[data-ios-safari="true"] .hero {
 }
 .hero-top-blur {
   display: none;
-}
-
-/* Keep the transition inside the hero so it scrolls away with the sky. */
-@supports (-webkit-touch-callout: none) or
-  (-webkit-backdrop-filter: blur(1rem)) {
-  .hero-controls {
-    top: calc(env(safe-area-inset-top, 0rem) + 1.5rem);
-    padding-left: max(1.25rem, env(safe-area-inset-left, 0rem));
-    padding-right: max(1.25rem, env(safe-area-inset-right, 0rem));
-    z-index: 2;
-  }
-
-  .hero-top-blur {
-    display: block;
-    position: absolute;
-    inset: 0 0 auto;
-    height: calc(env(safe-area-inset-top, 0rem) + 4rem);
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .hero-top-blur::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to bottom,
-      var(--hero-edge-color) 0,
-      var(--hero-edge-color) env(safe-area-inset-top, 0rem),
-      transparent 100%
-    );
-  }
-
-  /* Overlapping masks reduce the blur radius toward the clear hero below. */
-  .hero-top-blur > span {
-    position: absolute;
-    inset: 0;
-    -webkit-backdrop-filter: blur(var(--blur-radius));
-    backdrop-filter: blur(var(--blur-radius));
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      black 0%,
-      black var(--blur-start),
-      transparent var(--blur-end)
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      black 0%,
-      black var(--blur-start),
-      transparent var(--blur-end)
-    );
-  }
-
-  .hero-top-blur > span:nth-child(1) {
-    --blur-radius: 0.25rem;
-    --blur-start: 70%;
-    --blur-end: 100%;
-  }
-
-  .hero-top-blur > span:nth-child(2) {
-    --blur-radius: 0.5rem;
-    --blur-start: 45%;
-    --blur-end: 80%;
-  }
-
-  .hero-top-blur > span:nth-child(3) {
-    --blur-radius: 1rem;
-    --blur-start: 20%;
-    --blur-end: 60%;
-  }
-
-  .hero-top-blur > span:nth-child(4) {
-    --blur-radius: 2rem;
-    --blur-start: 0%;
-    --blur-end: 40%;
-  }
 }
 
 .hero-tool {

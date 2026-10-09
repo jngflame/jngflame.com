@@ -1,9 +1,9 @@
 import LiquidGlass from "liquid-glass-react";
 import {
-  type AnchorHTMLAttributes,
   lazy,
   type ReactNode,
   Suspense,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -11,10 +11,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { jordanArticle } from "./data/articles";
+import { isLinkNavigation, Link, linkStyle } from "./components/Link";
+import LoadingScreen from "./components/LoadingScreen";
 import { type HeroModel, heroModels } from "./data/heroModels";
 import { inventory } from "./data/inventory";
 import { supportedLanguages } from "./i18n";
+import { ArticleDetail } from "./pages/article_datail";
 
 const AvatarModel = lazy(() => import("./components/AvatarModel"));
 const CloudSky = lazy(() =>
@@ -32,8 +34,6 @@ const pagePaths = {
   articles: "/articles",
   inventory: "/inventory",
 };
-const linkStyle = "transition-opacity hover:opacity-60";
-let isLinkNavigation = false;
 
 function subscribe(callback: () => void) {
   window.addEventListener("popstate", callback);
@@ -48,48 +48,7 @@ function getPage(path: string): Page {
   return "missing";
 }
 
-function Link({
-  href,
-  onClick,
-  ...props
-}: AnchorHTMLAttributes<HTMLAnchorElement> & {
-  href: string;
-}) {
-  return (
-    <a
-      {...props}
-      href={href}
-      onClick={(event) => {
-        onClick?.(event);
-        if (
-          event.defaultPrevented ||
-          event.button !== 0 ||
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.altKey
-        )
-          return;
-        event.preventDefault();
-        const next = new URL(href, window.location.origin);
-        isLinkNavigation = true;
-        window.history.pushState(null, "", next.pathname + next.hash);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-        requestAnimationFrame(() => {
-          isLinkNavigation = false;
-          const behavior = "smooth";
-          if (next.hash)
-            document
-              .getElementById(next.hash.slice(1))
-              ?.scrollIntoView({ behavior });
-          else window.scrollTo({ top: 0, behavior });
-        });
-      }}
-    />
-  );
-}
-
-function Divider({ compact = false }: { compact?: boolean }) {
+function Divider({ compact = false }: { compact?: boolean; }) {
   return (
     <div
       aria-hidden="true"
@@ -115,7 +74,7 @@ function Divider({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function Footer({ compact = false }: { compact?: boolean }) {
+function Footer({ compact = false }: { compact?: boolean; }) {
   const { t } = useTranslation();
   return (
     <footer className="mx-auto w-full max-w-170 px-5 pb-18">
@@ -143,7 +102,7 @@ function Footer({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function Navigation({ page }: { page: Page }) {
+function Navigation({ page }: { page: Page; }) {
   const { t } = useTranslation();
 
   return (
@@ -217,7 +176,17 @@ function HeroTool({
   );
 }
 
-function Hero({ page }: { page: Page }) {
+function Hero({
+  page,
+  revealStarted,
+  onLoaded,
+  onError,
+}: {
+  page: Page;
+  revealStarted: boolean;
+  onLoaded: (ready: boolean) => void;
+  onError: (failed: boolean) => void;
+}) {
   const { t, i18n } = useTranslation();
   const [background, setBackground] = useState<HeroBackground>(() =>
     Math.random() < 0.5 ? "clouds" : "windows-xp",
@@ -240,12 +209,28 @@ function Hero({ page }: { page: Page }) {
   const [musicVisible, setMusicVisible] = useState(true);
   const [animations, setAnimations] = useState<string[]>([]);
   const [animation, setAnimation] = useState("idle");
+  const [animationStartTime, setAnimationStartTime] = useState(0);
+  const introStarted = useRef(false);
   const [playing, setPlaying] = useState(
     () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const [motionRequested, setMotionRequested] = useState(false);
   const [replayKey, setReplayKey] = useState(0);
   const [modelReady, setModelReady] = useState(false);
+  const [backgroundReady, setBackgroundReady] = useState(false);
+  const handleBackgroundReady = useCallback(() => setBackgroundReady(true), []);
+  const handleError = useCallback(() => onError(true), [onError]);
+  useEffect(() => {
+    onLoaded(modelReady && backgroundReady);
+  }, [modelReady, backgroundReady, onLoaded]);
+  useEffect(() => {
+    if (!revealStarted || !modelReady || introStarted.current) return;
+    introStarted.current = true;
+    if (!animations.includes("jump_down")) return;
+    setAnimationStartTime(1.2);
+    setAnimation("jump_down");
+    setReplayKey((value) => value + 1.2);
+  }, [revealStarted, modelReady, animations]);
   const hasTools = page !== "index";
   const animationLabels: Record<string, string> = t("hero.animations", {
     returnObjects: true,
@@ -268,11 +253,21 @@ function Hero({ page }: { page: Page }) {
     >
       {background === "clouds" ? (
         <Suspense fallback={null}>
-          <CloudSky />
+          <CloudSky onReady={handleBackgroundReady} />
         </Suspense>
       ) : (
         <img
           src="/wallpaper/windows-xp.jpg"
+          onLoad={async (event) => {
+            const image = event.currentTarget;
+            try {
+              await image.decode();
+              handleBackgroundReady();
+            } catch {
+              handleError();
+            }
+          }}
+          onError={handleError}
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 size-full object-cover"
@@ -291,13 +286,15 @@ function Hero({ page }: { page: Page }) {
           }
         >
           <AvatarModel
-            modelUrl={asset(model)}
+            modelUrl={asset(`glb/${model}`)}
             animation={animation}
-            playing={playing}
+            animationStartTime={animationStartTime}
+            playing={playing && revealStarted}
             motionRequested={motionRequested}
             replayKey={replayKey}
             onAnimationsChange={setAnimations}
             onReadyChange={setModelReady}
+            onError={handleError}
             onAnimationChange={setAnimation}
           />
         </Suspense>
@@ -343,6 +340,7 @@ function Hero({ page }: { page: Page }) {
               value=""
               disabled={!modelReady}
               onChange={(event) => {
+                setAnimationStartTime(0);
                 setAnimation(event.target.value);
                 setPlaying(true);
                 setMotionRequested(true);
@@ -375,6 +373,7 @@ function Hero({ page }: { page: Page }) {
                 if (event.target.value === model) return;
                 setModelReady(false);
                 setAnimations([]);
+                setAnimationStartTime(0);
                 setAnimation("idle");
                 setModel(event.target.value as HeroModel);
               }}
@@ -399,6 +398,7 @@ function Hero({ page }: { page: Page }) {
               aria-label={t("hero.backgroundControls")}
               value={background}
               onChange={(event) => {
+                setBackgroundReady(false);
                 setBackground(event.target.value as HeroBackground);
               }}
               className="absolute inset-0 size-full cursor-pointer opacity-0"
@@ -657,37 +657,13 @@ function InventoryPage() {
   );
 }
 
-function ArticleDetail() {
-  const { t, i18n } = useTranslation();
-  return (
-    <main id="content" className="mx-auto w-full max-w-170 px-6 pt-6 pb-13.5">
-      <Link
-        href="/articles#content"
-        className={`font-orbiter leading-6 text-black/30 underline underline-offset-2 ${linkStyle}`}
-      >
-        {t("navigation.back")}
-      </Link>
-      <article lang="ko" className="font-reading">
-        <h1 className="mt-6 text-2xl leading-9 font-semibold">
-          이집트에서 요르단으로
-        </h1>
-        <p
-          lang={i18n.resolvedLanguage}
-          className="mt-3 font-orbiter text-sm leading-5.25 text-black/30"
-        >
-          {t("article.metadata", { months: 3, minutes: 12 })}
-        </p>
-        <div className="mt-8 text-justify text-base md:text-lg leading-[1.8] md:leading-loose text-black/80">
-          {jordanArticle.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-        </div>
-      </article>
-    </main>
-  );
-}
-
 function App() {
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [assetsFailed, setAssetsFailed] = useState(false);
+  const [revealStarted, setRevealStarted] = useState(false);
+  const [loadingFinished, setLoadingFinished] = useState(false);
+  const startReveal = useCallback(() => setRevealStarted(true), []);
+  const finishLoading = useCallback(() => setLoadingFinished(true), []);
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? "en";
   const path = useSyncExternalStore(
@@ -733,29 +709,50 @@ function App() {
       document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
   }, [path]);
   return (
-    <div className="min-h-dvh bg-white text-black">
-      <a
-        href="#content"
-        className="sr-only z-50 bg-white p-3 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-      >
-        {t("navigation.skipToContent")}
-      </a>
-      {!isDetail && <Hero page={page} />}
-      {!isDetail && <Navigation page={page} />}
-      {page === "index" && <IndexPage />}
-      {page === "articles" && <ArticlePage />}
-      {page === "inventory" && <InventoryPage />}
-      {page === "detail" && <ArticleDetail />}
-      {page === "missing" && (
-        <main id="content" className="mx-auto max-w-170 px-5 py-20">
-          <h1 className="text-2xl">{t("missing.title")}</h1>
-          <Link href="/" className="mt-6 inline-block underline">
-            {t("missing.backToIndex")}
-          </Link>
-        </main>
+    <>
+      {!isDetail && !loadingFinished && (
+        <LoadingScreen
+          ready={assetsLoaded}
+          failed={assetsFailed}
+          onExitStart={startReveal}
+          onExited={finishLoading}
+        />
       )}
-      <Footer compact={page === "articles" || page === "detail"} />
-    </div>
+      <div
+        inert={!isDetail && !loadingFinished}
+        aria-busy={!isDetail && !loadingFinished}
+        className="min-h-dvh bg-white text-black"
+      >
+        <a
+          href="#content"
+          className="sr-only z-50 bg-white p-3 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+        >
+          {t("navigation.skipToContent")}
+        </a>
+        {!isDetail && (
+          <Hero
+            page={page}
+            revealStarted={revealStarted}
+            onLoaded={setAssetsLoaded}
+            onError={setAssetsFailed}
+          />
+        )}
+        {!isDetail && <Navigation page={page} />}
+        {page === "index" && <IndexPage />}
+        {page === "articles" && <ArticlePage />}
+        {page === "inventory" && <InventoryPage />}
+        {page === "detail" && <ArticleDetail />}
+        {page === "missing" && (
+          <main id="content" className="mx-auto max-w-170 px-5 py-20">
+            <h1 className="text-2xl">{t("missing.title")}</h1>
+            <Link href="/" className="mt-6 inline-block underline">
+              {t("missing.backToIndex")}
+            </Link>
+          </main>
+        )}
+        <Footer compact={page === "articles" || page === "detail"} />
+      </div>
+    </>
   );
 }
 
