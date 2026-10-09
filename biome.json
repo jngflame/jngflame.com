@@ -22,6 +22,9 @@
       "**",
       "!dist",
       "!node_modules",
+      "!.venv",
+      "!**/.mypy_cache",
+      "!**/__pycache__",
       "!src/lib/custom-effects",
       "!public/figma",
       "!public/*.svg"

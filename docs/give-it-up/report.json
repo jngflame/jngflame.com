@@ -1,0 +1,24 @@
+{
+  "sourceSha256": "25081eabeab1b52bae1d59b16ac6371451fb06d4e36b5455b95e06787199907b",
+  "sourceFrames": 7358,
+  "sourceWidth": 1920,
+  "sourceHeight": 1012,
+  "sourceFps": 30.0,
+  "duration": 245.26666666666668,
+  "sampleFps": 30.0,
+  "samples": 7359,
+  "missingPoseRatio": 0.0008154389779831476,
+  "rejectedPoseFrames": 6,
+  "lowConfidenceJointRatio": 0.1282051282051282,
+  "meanJointVisibility": 0.7933609106659018,
+  "longestMissingPoseSeconds": 0.03333333333333333,
+  "longestInterpolatedJointSeconds": 7.3,
+  "method": "FreeMoCap v1.8.2: SkellyTracker Holistic heavy + single-camera non-flattened inferred depth + SkellyForge interpolation and 4Hz Butterworth; guide used for crop only",
+  "depth": "Monocular relative-depth estimate, not calibrated multiview reconstruction",
+  "fingerCapture": true,
+  "handDetectionRatios": {
+    "Left": 0.684968741505844,
+    "Right": 0.5023104104376189
+  },
+  "handMissingPolicy": "Retargeting interpolates finger directions in palm coordinates between detections; nearest shape held at edges; neutral only if no valid hand exists"
+}

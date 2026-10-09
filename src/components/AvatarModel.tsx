@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type AnimationAction,
@@ -15,7 +15,9 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { disposeModel, loadModel } from "../lib/models";
+import { disposeModel, loadHeroModel } from "../lib/models";
+import { syncMusicAnimation } from "../lib/musicAnimation";
+import type { MusicPlayback } from "../lib/youtube";
 
 const idleReturnDuration = 0.8;
 
@@ -26,6 +28,7 @@ export default function AvatarModel({
   playing,
   motionRequested,
   replayKey,
+  musicClock,
   onAnimationsChange,
   onReadyChange,
   onAnimationChange,
@@ -37,6 +40,7 @@ export default function AvatarModel({
   playing: boolean;
   motionRequested: boolean;
   replayKey: number;
+  musicClock: RefObject<MusicPlayback | null> | null;
   onAnimationsChange: (names: string[]) => void;
   onReadyChange: (ready: boolean) => void;
   onAnimationChange: (name: string) => void;
@@ -67,6 +71,7 @@ export default function AvatarModel({
     playing,
     motionRequested,
     replayKey,
+    musicClock,
   });
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
@@ -79,9 +84,17 @@ export default function AvatarModel({
       playing,
       motionRequested,
       replayKey,
+      musicClock,
     };
     playbackRef.current?.();
-  }, [animation, animationStartTime, playing, motionRequested, replayKey]);
+  }, [
+    animation,
+    animationStartTime,
+    playing,
+    motionRequested,
+    replayKey,
+    musicClock,
+  ]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -115,7 +128,7 @@ export default function AvatarModel({
       canvas.className = "absolute inset-0 size-full";
       host?.append(canvas);
 
-      const gltf = await loadModel(modelUrl, abort.signal);
+      const gltf = await loadHeroModel(modelUrl, abort.signal);
       if (disposed) {
         disposeModel(gltf.scene);
         return;
@@ -156,7 +169,9 @@ export default function AvatarModel({
         if (
           disposed ||
           event.action !== current ||
-          current.getClip().name === "idle"
+          current.getClip().name === "idle" ||
+          (current.getClip().name === "give_it_up" &&
+            selectionRef.current.musicClock)
         )
           return;
         onAnimationChange("idle");
@@ -226,6 +241,8 @@ export default function AvatarModel({
           (cameraHalfHeight ?? halfHeight) +
           (halfHeight - (cameraHalfHeight ?? halfHeight)) * blend;
         camera.position.y += ((top + bottom) / 2 - camera.position.y) * blend;
+        // Follow the framing vertically while keeping the view horizontal.
+        camera.lookAt(0, camera.position.y, 0);
         const canvasAspect = canvas.clientWidth / canvas.clientHeight;
         camera.left = -cameraHalfHeight * canvasAspect;
         camera.right = cameraHalfHeight * canvasAspect;
@@ -311,12 +328,20 @@ export default function AvatarModel({
         draw();
       };
       let previousTime = 0;
+      const syncMusic = () => {
+        const clock = selectionRef.current.musicClock;
+        if (!clock || !mixer || current.getClip().name !== "give_it_up")
+          return false;
+        // The embedded video is the clock, including seeks, pauses and buffering.
+        syncMusicAnimation(current, mixer, clock.current?.getTime() ?? 0);
+        return true;
+      };
       const frame = (time: number) => {
         const delta = previousTime
           ? Math.min((time - previousTime) / 1000, 0.05)
           : 0;
         previousTime = time;
-        mixer?.update(delta);
+        if (!syncMusic()) mixer?.update(delta);
         draw(delta);
       };
       updatePlayback = () => {
@@ -328,6 +353,7 @@ export default function AvatarModel({
           (!motionPreference.matches || selectionRef.current.motionRequested);
         nextRenderer.setAnimationLoop(animate ? frame : null);
         canvas.dataset.playing = String(animate);
+        syncMusic();
         draw();
       };
       playbackRef.current = () => {
@@ -339,7 +365,12 @@ export default function AvatarModel({
           next.reset().setEffectiveWeight(1).play();
           next.time =
             selection.animation === "idle" ? 0 : selection.animationStartTime;
-          if (
+          if (selection.musicClock && selection.animation === "give_it_up") {
+            // A blended pose would trail behind the music after a seek.
+            for (const action of actions.values()) {
+              if (action !== next) action.stop();
+            }
+          } else if (
             next !== current &&
             !motionPreference.matches &&
             (selection.animation === "idle" ||

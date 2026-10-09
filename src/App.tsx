@@ -16,9 +16,11 @@ import LoadingScreen from "./components/LoadingScreen";
 import { type HeroModel, heroModels } from "./data/heroModels";
 import { inventory } from "./data/inventory";
 import { supportedLanguages } from "./i18n";
+import type { MusicPlayback } from "./lib/youtube";
 import { ArticleDetail } from "./pages/article_datail";
 
 const AvatarModel = lazy(() => import("./components/AvatarModel"));
+const HeroMusicPlayer = lazy(() => import("./components/HeroMusicPlayer"));
 const CloudSky = lazy(() =>
   import("./components/CloudSky").then((module) => ({
     default: module.CloudSky,
@@ -48,7 +50,7 @@ function getPage(path: string): Page {
   return "missing";
 }
 
-function Divider({ compact = false }: { compact?: boolean; }) {
+function Divider({ compact = false }: { compact?: boolean }) {
   return (
     <div
       aria-hidden="true"
@@ -74,7 +76,7 @@ function Divider({ compact = false }: { compact?: boolean; }) {
   );
 }
 
-function Footer({ compact = false }: { compact?: boolean; }) {
+function Footer({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   return (
     <footer className="mx-auto w-full max-w-170 px-5 pb-18">
@@ -102,7 +104,7 @@ function Footer({ compact = false }: { compact?: boolean; }) {
   );
 }
 
-function Navigation({ page }: { page: Page; }) {
+function Navigation({ page }: { page: Page }) {
   const { t } = useTranslation();
 
   return (
@@ -177,12 +179,10 @@ function HeroTool({
 }
 
 function Hero({
-  page,
   revealStarted,
   onLoaded,
   onError,
 }: {
-  page: Page;
   revealStarted: boolean;
   onLoaded: (ready: boolean) => void;
   onError: (failed: boolean) => void;
@@ -206,7 +206,8 @@ function Hero({
       else style.removeProperty("--hero-edge-color");
     };
   }, [background]);
-  const [musicVisible, setMusicVisible] = useState(true);
+  const [musicActive, setMusicActive] = useState(false);
+  const musicClock = useRef<MusicPlayback | null>(null);
   const [animations, setAnimations] = useState<string[]>([]);
   const [animation, setAnimation] = useState("idle");
   const [animationStartTime, setAnimationStartTime] = useState(0);
@@ -231,7 +232,6 @@ function Hero({
     setAnimation("jump_down");
     setReplayKey((value) => value + 1.2);
   }, [revealStarted, modelReady, animations]);
-  const hasTools = page !== "index";
   const animationLabels: Record<string, string> = t("hero.animations", {
     returnObjects: true,
   });
@@ -292,6 +292,7 @@ function Hero({
             playing={playing && revealStarted}
             motionRequested={motionRequested}
             replayKey={replayKey}
+            musicClock={musicActive ? musicClock : null}
             onAnimationsChange={setAnimations}
             onReadyChange={setModelReady}
             onError={handleError}
@@ -340,6 +341,7 @@ function Hero({
               value=""
               disabled={!modelReady}
               onChange={(event) => {
+                setMusicActive(event.target.value === "give_it_up");
                 setAnimationStartTime(0);
                 setAnimation(event.target.value);
                 setPlaying(true);
@@ -374,7 +376,11 @@ function Hero({
                 setModelReady(false);
                 setAnimations([]);
                 setAnimationStartTime(0);
-                setAnimation("idle");
+                setAnimation(
+                  musicActive && animation === "give_it_up"
+                    ? "give_it_up"
+                    : "idle",
+                );
                 setModel(event.target.value as HeroModel);
               }}
               className="absolute inset-0 size-full cursor-pointer opacity-0"
@@ -416,28 +422,24 @@ function Hero({
           </HeroTool>
         </div>
       </div>
-      {hasTools && musicVisible && (
-        <div className="absolute bottom-15 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-white/20 px-5 py-2 font-orbiter">
-          <a
-            href="https://open.spotify.com/search/Give%20It%20Up"
-            target="_blank"
-            rel="noreferrer"
-            className={`leading-tight ${linkStyle}`}
-          >
-            <span className="block text-sm text-black/80">Give It Up</span>
-            <span className="block text-xs text-black/40">
-              {t("hero.playOnSpotify")}
-            </span>
-          </a>
-          <button
-            type="button"
-            aria-label={t("hero.dismissMusic")}
-            onClick={() => setMusicVisible(false)}
-            className="cursor-pointer rounded-full"
-          >
-            <img src={asset("21823.svg")} alt="" width={16} height={16} />
-          </button>
-        </div>
+      {musicActive && (
+        <Suspense fallback={null}>
+          <HeroMusicPlayer
+            clock={musicClock}
+            replayKey={replayKey}
+            onPlay={() => {
+              setAnimation("give_it_up");
+              setAnimationStartTime(0);
+              setPlaying(true);
+              setMotionRequested(true);
+            }}
+            onEnded={() => setAnimation("idle")}
+            onClose={() => {
+              setMusicActive(false);
+              setAnimation("idle");
+            }}
+          />
+        </Suspense>
       )}
     </section>
   );
@@ -731,7 +733,6 @@ function App() {
         </a>
         {!isDetail && (
           <Hero
-            page={page}
             revealStarted={revealStarted}
             onLoaded={setAssetsLoaded}
             onError={setAssetsFailed}
