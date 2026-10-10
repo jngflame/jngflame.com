@@ -6,11 +6,8 @@ export interface MusicPlayback {
 
 export interface YouTubePlayer {
   playVideo: () => void;
-  pauseVideo: () => void;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   getCurrentTime: () => number;
-  getDuration: () => number;
-  getPlayerState: () => number;
   getIframe: () => HTMLIFrameElement;
   destroy: () => void;
 }
@@ -28,6 +25,7 @@ interface YouTubeAPI {
       width: string;
       height: string;
       playerVars: {
+        autoplay: number;
         origin: string;
         playsinline: number;
         controls: number;
@@ -39,7 +37,6 @@ interface YouTubeAPI {
         onReady: (event: PlayerEvent) => void;
         onStateChange: (event: PlayerEvent) => void;
         onError: (event: PlayerEvent) => void;
-        onAutoplayBlocked: () => void;
       };
     },
   ) => YouTubePlayer;

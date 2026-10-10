@@ -251,7 +251,7 @@ function Hero({
   return (
     <section
       aria-label={t("hero.label")}
-      className="hero relative isolate overflow-hidden"
+      className="hero relative overflow-hidden"
     >
       {background === "clouds" ? (
         <Suspense fallback={null}>
@@ -308,7 +308,7 @@ function Hero({
         <span />
         <span />
       </div>
-      <div className="hero-controls pointer-events-none absolute inset-x-0 top-8 z-20 mx-auto flex max-w-170 items-start justify-between px-5">
+      <div className="hero-controls pointer-events-none absolute inset-x-0 top-8 z-40 mx-auto flex max-w-170 items-start justify-between px-5">
         <HeroTool wide>
           <label htmlFor="language" className="sr-only">
             {t("hero.language")}

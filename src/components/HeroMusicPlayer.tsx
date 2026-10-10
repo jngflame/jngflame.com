@@ -13,9 +13,6 @@ import {
   type YouTubePlayer,
 } from "../lib/youtube";
 
-const formatTime = (seconds: number) =>
-  `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
-
 export default function HeroMusicPlayer({
   clock,
   replayKey,
@@ -31,7 +28,7 @@ export default function HeroMusicPlayer({
 }) {
   const { t } = useTranslation();
   const panelRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ pointerId: number; x: number; y: number } | null>(
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; } | null>(
     null,
   );
   const [panelPosition, setPanelPosition] = useState<{
@@ -45,44 +42,50 @@ export default function HeroMusicPlayer({
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
-  const [playing, setPlaying] = useState(false);
-  const [blocked, setBlocked] = useState(false);
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [attempt, setAttempt] = useState(0);
   const lastReplayKey = useRef(replayKey);
 
   const movePanel = (x: number, y: number) => {
     const panel = panelRef.current;
-    const hero = panel?.parentElement;
-    if (!panel || !hero) return;
+    if (!panel) return;
     setPanelPosition({
-      x: Math.max(0, Math.min(x, hero.clientWidth - panel.offsetWidth)),
-      y: Math.max(0, Math.min(y, hero.clientHeight - panel.offsetHeight)),
+      x: Math.max(
+        0,
+        Math.min(x, document.documentElement.clientWidth - panel.offsetWidth),
+      ),
+      y: Math.max(0, Math.min(y, window.innerHeight - panel.offsetHeight)),
     });
   };
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    const hero = panel?.parentElement;
-    if (!panel || !hero) return;
-    const observer = new ResizeObserver(() => {
+    if (!panel) return;
+    const constrainPosition = () => {
       setPanelPosition((current) => {
         const panelRect = panel.getBoundingClientRect();
-        const heroRect = hero.getBoundingClientRect();
-        const x = current?.x ?? panelRect.left - heroRect.left;
-        const y = current?.y ?? panelRect.top - heroRect.top;
+        const x = current?.x ?? panelRect.left;
+        const y = current?.y ?? panelRect.top;
         const next = {
-          x: Math.max(0, Math.min(x, hero.clientWidth - panel.offsetWidth)),
-          y: Math.max(0, Math.min(y, hero.clientHeight - panel.offsetHeight)),
+          x: Math.max(
+            0,
+            Math.min(
+              x,
+              document.documentElement.clientWidth - panel.offsetWidth,
+            ),
+          ),
+          y: Math.max(0, Math.min(y, window.innerHeight - panel.offsetHeight)),
         };
         if (next.x === x && next.y === y) return current;
         return next;
       });
-    });
-    observer.observe(hero);
+    };
+    const observer = new ResizeObserver(constrainPosition);
     observer.observe(panel);
-    return () => observer.disconnect();
+    window.addEventListener("resize", constrainPosition);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", constrainPosition);
+    };
   }, []);
 
   useEffect(() => {
@@ -96,13 +99,9 @@ export default function HeroMusicPlayer({
     let disposed = false;
     let failed = false;
     let player: YouTubePlayer | undefined;
-    let interval: number | undefined;
     let readyTimeout: number | undefined;
     let lastTime = 0;
     setStatus("loading");
-    setBlocked(false);
-    setPlaying(false);
-    setPosition(0);
     const sample = (target: YouTubePlayer) => {
       const time = target.getCurrentTime();
       if (Number.isFinite(time)) lastTime = Math.max(0, time);
@@ -112,12 +111,10 @@ export default function HeroMusicPlayer({
       if (disposed || failed) return;
       failed = true;
       window.clearTimeout(readyTimeout);
-      window.clearInterval(interval);
       clock.current = { getTime: () => lastTime };
       playerRef.current = null;
       player?.destroy();
       player = undefined;
-      setPlaying(false);
       setStatus("error");
     };
     void loadYouTubeAPI()
@@ -131,10 +128,11 @@ export default function HeroMusicPlayer({
           width: "100%",
           height: "100%",
           playerVars: {
+            autoplay: 1,
             origin: window.location.origin,
             playsinline: 1,
-            controls: 0,
-            disablekb: 1,
+            controls: 1,
+            disablekb: 0,
             iv_load_policy: 3,
             cc_load_policy: 0,
           },
@@ -146,28 +144,17 @@ export default function HeroMusicPlayer({
               clock.current = { getTime: () => sample(target) };
               setStatus("ready");
               target.getIframe().title = "Give It Up — YouTube";
-              interval = window.setInterval(() => {
-                setPosition(sample(target));
-                setDuration(target.getDuration());
-                setPlaying(target.getPlayerState() === 1);
-              }, 100);
               target.playVideo();
             },
             onStateChange: ({ target, data }) => {
               if (disposed || failed) return;
-              setPosition(sample(target));
-              setDuration(target.getDuration());
-              setPlaying(data === 1);
+              sample(target);
               if (data === 1 || data === 2) {
-                if (data === 1) setBlocked(false);
                 // Seeking back from the end must restore the dance even if paused.
                 callbacks.current.onPlay();
               } else if (data === 0) callbacks.current.onEnded();
             },
             onError: fail,
-            onAutoplayBlocked: () => {
-              if (!disposed && !failed) setBlocked(true);
-            },
           },
         });
       })
@@ -175,7 +162,6 @@ export default function HeroMusicPlayer({
     return () => {
       disposed = true;
       window.clearTimeout(readyTimeout);
-      window.clearInterval(interval);
       clock.current = null;
       playerRef.current = null;
       player?.destroy();
@@ -194,15 +180,15 @@ export default function HeroMusicPlayer({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 bottom-5 z-10 max-h-full w-89 overflow-y-auto font-orbiter"
+      className="fixed right-0 bottom-1 z-30 max-h-dvh w-89 overflow-y-auto font-orbiter"
       style={
         panelPosition
           ? {
-              left: panelPosition.x,
-              top: panelPosition.y,
-              right: "auto",
-              bottom: "auto",
-            }
+            left: panelPosition.x,
+            top: panelPosition.y,
+            right: "auto",
+            bottom: "auto",
+          }
           : undefined
       }
     >
@@ -228,13 +214,8 @@ export default function HeroMusicPlayer({
             }}
             onPointerMove={(event) => {
               const drag = dragRef.current;
-              const hero = panelRef.current?.parentElement;
-              if (!drag || drag.pointerId !== event.pointerId || !hero) return;
-              const rect = hero.getBoundingClientRect();
-              movePanel(
-                event.clientX - rect.left - drag.x,
-                event.clientY - rect.top - drag.y,
-              );
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              movePanel(event.clientX - drag.x, event.clientY - drag.y);
             }}
             onPointerUp={(event) => {
               if (dragRef.current?.pointerId !== event.pointerId) return;
@@ -255,15 +236,13 @@ export default function HeroMusicPlayer({
               };
               const direction = directions[event.key];
               const panel = panelRef.current;
-              const hero = panel?.parentElement;
-              if (!direction || !panel || !hero) return;
+              if (!direction || !panel) return;
               event.preventDefault();
               const rect = panel.getBoundingClientRect();
-              const heroRect = hero.getBoundingClientRect();
               const step = event.shiftKey ? 40 : 10;
               movePanel(
-                rect.left - heroRect.left + direction[0] * step,
-                rect.top - heroRect.top + direction[1] * step,
+                rect.left + direction[0] * step,
+                rect.top + direction[1] * step,
               );
             }}
           >
@@ -279,12 +258,7 @@ export default function HeroMusicPlayer({
           </button>
         </div>
         <div ref={hostRef} className="aspect-video w-full bg-black" />
-        {status === "loading" && (
-          <p role="status" className="px-3 py-2 text-xs">
-            {t("hero.musicLoading")}
-          </p>
-        )}
-        {status === "error" ? (
+        {status === "error" && (
           <div role="alert" className="space-y-2 px-3 py-2 text-xs">
             <p>{t("hero.musicError")}</p>
             <button
@@ -302,56 +276,6 @@ export default function HeroMusicPlayer({
             >
               {t("hero.musicOpenYouTube")}
             </a>
-          </div>
-        ) : (
-          <div className="px-3 pt-2 pb-3">
-            {blocked && (
-              <p role="status" className="mb-2 text-xs">
-                {t("hero.musicPlayPrompt")}
-              </p>
-            )}
-            <div className="flex items-center gap-2 text-xs">
-              <button
-                type="button"
-                disabled={status !== "ready"}
-                onClick={() => {
-                  const player = playerRef.current;
-                  if (!player) return;
-                  if (player.getPlayerState() === 1) player.pauseVideo();
-                  else {
-                    if (player.getPlayerState() === 0) player.seekTo(0, true);
-                    player.playVideo();
-                  }
-                }}
-                className="min-w-10 cursor-pointer rounded py-1 disabled:opacity-40"
-              >
-                {t(playing ? "hero.musicPause" : "hero.musicPlay")}
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={duration || 1}
-                step={0.1}
-                value={Math.min(position, duration || 1)}
-                disabled={status !== "ready" || !duration}
-                aria-label={t("hero.musicPosition")}
-                aria-valuetext={`${formatTime(position)} / ${formatTime(duration)}`}
-                onChange={(event) => {
-                  const time = Number(event.target.value);
-                  const player = playerRef.current;
-                  if (!player) return;
-                  const wasPlaying = player.getPlayerState() === 1;
-                  callbacks.current.onPlay();
-                  player.seekTo(time, true);
-                  if (!wasPlaying) player.pauseVideo();
-                  setPosition(time);
-                }}
-                className="min-w-0 flex-1 cursor-pointer accent-black"
-              />
-              <span className="shrink-0 tabular-nums">
-                {formatTime(position)} / {formatTime(duration)}
-              </span>
-            </div>
           </div>
         )}
       </div>
